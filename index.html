@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Ayo Olopon · start.ng</title>
+<meta name="description" content="Sit down on the verandah with Baba for a game of Ayo, the Yoruba seed game.">
+<meta name="theme-color" content="#3b2a1e">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+<script type="importmap">{ "imports": { "three": "./vendor/three.module.min.js" } }</script>
+</head>
+<body data-mode="menu">
+<div id="stage"></div>
+<div class="loading" id="loading">Setting up the board…</div>
+<div id="counts"></div>
+<div class="bubble" id="bubble" hidden></div>
+
+<!-- start.ng profile card: face, character name, @account -->
+<div class="card" id="card">
+  <img id="card-face" alt="" hidden>
+  <div class="card-initial" id="card-initial">G</div>
+  <div class="card-text">
+    <b id="card-name">Guest</b>
+    <span id="card-account">Playing as guest</span>
+  </div>
+  <button id="card-signin" type="button">Sign in</button>
+</div>
+
+<div class="corner">
+  <button class="round" id="rules-open" type="button" aria-label="How to play">?</button>
+  <button class="round" id="mute" type="button" aria-label="Sound on or off">🔊</button>
+</div>
+
+<div class="hud" id="hud" hidden>
+  <div class="scoreboard">
+    <div><small id="label-you">You</small><b id="score-you">0</b></div>
+    <span class="vs">seeds <em id="level-badge">Normal</em></span>
+    <div><small>Baba</small><b id="score-baba">0</b></div>
+  </div>
+  <p class="turn" id="turn"></p>
+  <p class="hint" id="hint">Tap a glowing number, or press 1–6</p>
+</div>
+
+<section class="screen" id="menu">
+  <div class="panel">
+    <p class="kicker">A start.ng game</p>
+    <h1>Ayo <span>Olopon</span></h1>
+    <p class="lead">It's a quiet afternoon on the verandah. Baba has set out the board. Sit down and play Ayo, the Yoruba seed game, and see if you can beat him.</p>
+    <p class="label">How strong is Baba?</p>
+    <div class="levels" role="group" aria-label="Difficulty">
+      <button type="button" data-level="0">Easy</button>
+      <button type="button" data-level="1">Normal</button>
+      <button type="button" data-level="2">Hard</button>
+    </div>
+    <p class="note" id="streak-note"></p>
+    <button class="big" id="play" type="button">Sit down and play</button>
+    <p class="note" id="menu-signin-note">Playing as a guest. <button class="link" id="menu-signin" type="button">Sign in with start.ng</button> to play as your own character and save your win streak.</p>
+  </div>
+</section>
+
+<section class="screen" id="over" hidden>
+  <div class="panel">
+    <h2 id="over-title">You beat Baba!</h2>
+    <div class="result">
+      <div><small>You</small><b id="over-you">0</b></div>
+      <div><small>Baba</small><b id="over-baba">0</b></div>
+    </div>
+    <p class="streak" id="over-streak"></p>
+    <p class="status" id="over-status"></p>
+    <button class="secondary" id="over-signin" type="button" hidden>Sign in with start.ng</button>
+    <h3>Leaderboard: longest win streaks</h3>
+    <ol class="board" id="board"></ol>
+    <p class="note" id="board-note"></p>
+    <button class="big" id="again" type="button">Play again</button>
+  </div>
+</section>
+
+<section class="sheet" id="rules" hidden>
+  <div class="panel">
+    <h2>How to play Ayo</h2>
+    <ol class="rules">
+      <li>The near row of six pits is yours. Each starts with 4 seeds.</li>
+      <li>On your turn, pick one of your pits. All its seeds are sown one by one into the pits after it, going anticlockwise: along your row to the right, then back along Baba's row.</li>
+      <li>If your last seed lands in one of Baba's pits and makes it <b>2 or 3</b>, you capture them. Then check the pit before it: if that's also Baba's and holds 2 or 3, take those too, and so on.</li>
+      <li>A pit with 12 or more seeds goes all the way round, and skips the pit it started from.</li>
+      <li>You can't take every seed Baba has in one move. If you try, you take nothing.</li>
+      <li>If Baba's row is empty, you must give him seeds if you can.</li>
+      <li>The first to <b>25 seeds</b> wins. If nobody can capture for a long time, each player keeps the seeds on their own side.</li>
+    </ol>
+    <button class="big" id="rules-close" type="button">Got it</button>
+  </div>
+</section>
+
+<script type="module" src="src/main.js"></script>
+</body>
+</html>
