@@ -18,6 +18,10 @@ Baba plays at three strengths (Easy, Normal, Hard). Wins on Normal and Hard buil
 
 Controls: click or tap one of your pits (or press 1–6). Drag to look around, scroll to zoom, M for sound.
 
+- **Baba's lesson:** your first game starts with Baba walking you through it: your row, how sowing goes round, and (as soon as you have one) a glowing pit that captures. You can skip it, or replay it from the **?** sheet.
+- **Move preview** (Easy and Normal): point at one of your pits, or tap it once on a phone, to see the pits its seeds pass through, where the last one lands, and what it would capture. Tap again to play.
+- **Animation speed:** Normal, Fast or Very fast, in the menu.
+
 ## Your start.ng character
 
 The game asks start.ng who's playing (`startng:whoami` through `https://start.ng/connect`) and builds your 3D character from your start.ng `style`: body shape, top, trousers or skirt, skin, hair colour, hair (short, afro, braids, bun, ponytail, dreads, bald), hat (cap, beanie, top hat, crown) and accessory (glasses, earrings, beard, scarf, backpack). Change your character on start.ng and come back to the tab, and it changes at the board too. Guests play as start.ng's guest look.
@@ -44,4 +48,4 @@ Locally there's no start.ng player, so you play as a guest; add `?style={"hair":
 
 ## Credits
 
-Sky lighting (`balcony`) and wood, tile and plaster textures from [Poly Haven](https://polyhaven.com), CC0.
+Sky lighting (`balcony`) and wood, tile and plaster textures from [Poly Haven](https://polyhaven.com), CC0. The textures are re-encoded as WebP and the sky halved to 512×256 to keep the whole game around 2.3 MB.

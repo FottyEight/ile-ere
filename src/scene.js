@@ -2,9 +2,19 @@
 import * as THREE from 'three';
 import { RGBELoader } from '../vendor/RGBELoader.js';
 
-const loader = new THREE.TextureLoader();
+// Every texture and the sky go through one loading manager, so the page can show progress
+// and wait until the verandah is fully dressed before showing it.
+const manager = new THREE.LoadingManager();
+let progress = () => {};
+manager.onProgress = (url, loaded, total) => progress(loaded / total);
+export function onLoadProgress(fn) {
+  progress = fn;
+}
+const allLoaded = new Promise((resolve) => { manager.onLoad = resolve; });
+
+const loader = new THREE.TextureLoader(manager);
 function tex(name, repeatX = 1, repeatY = repeatX, color = false) {
-  const t = loader.load(`assets/${name}.jpg`);
+  const t = loader.load(`assets/${name}.webp`);
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
   t.repeat.set(repeatX, repeatY);
   t.anisotropy = 8;
@@ -83,10 +93,12 @@ export async function buildScene(renderer) {
   const scene = new THREE.Scene();
 
   // Afternoon light from the sky photo; the house blocks most of it so it reads as shade.
-  const hdr = await new RGBELoader().loadAsync('assets/sky.hdr');
-  hdr.mapping = THREE.EquirectangularReflectionMapping;
-  scene.environment = hdr;
-  scene.background = hdr;
+  // (started now, used once everything else is queued, so all downloads run together)
+  const sky = new RGBELoader(manager).loadAsync('assets/sky.hdr').then((hdr) => {
+    hdr.mapping = THREE.EquirectangularReflectionMapping;
+    scene.environment = hdr;
+    scene.background = hdr;
+  });
   scene.backgroundBlurriness = 0.35;
   scene.backgroundIntensity = 0.85;
   scene.environmentIntensity = 1.0;
@@ -262,5 +274,6 @@ export async function buildScene(renderer) {
   glow.visible = false;
   scene.add(glow);
 
+  await Promise.all([sky, allLoaded]);
   return { scene, seeds, hitTargets, glow, sun };
 }

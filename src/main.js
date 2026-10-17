@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { buildScene, pitCenter, storeCenter, seedSlot, storeSlot, BOARD_TOP, SEAT_Z } from './scene.js';
+import { buildScene, onLoadProgress, pitCenter, storeCenter, seedSlot, storeSlot, BOARD_TOP, SEAT_Z } from './scene.js';
 import { buildCharacter, styleKey } from './character.js';
 import { newGame, play, legalMoves, chooseMove } from './ayo.js';
 import { whoami, saveRun, leaderboard, signIn, onStartNg, cameAsGuest, FALLBACK_GUEST } from './startng.js';
@@ -7,7 +7,11 @@ import { unlock, sfx, toggleMute, isMuted } from './sound.js';
 
 const params = new URLSearchParams(location.search);
 const $ = (id) => document.getElementById(id);
-const SPEED = params.has('fast') ? 6 : 1; // ?fast speeds animations up for testing
+// Animation speed: Normal, Fast, Very fast (chosen in the menu). ?fast forces the fastest, for tests.
+const SPEEDS = [1, 2.2, 6];
+let speedLevel = 0;
+try { speedLevel = Math.min(2, Math.max(0, Number(localStorage.getItem('ayo-speed')) || 0)); } catch { /* storage blocked */ }
+let SPEED = params.has('fast') ? 6 : SPEEDS[speedLevel];
 const LEVELS = ['Easy', 'Normal', 'Hard'];
 
 // ── Renderer and scene ──
@@ -21,6 +25,9 @@ renderer.toneMappingExposure = 1.2;
 $('stage').append(renderer.domElement);
 
 const camera = new THREE.PerspectiveCamera(36, innerWidth / innerHeight, 0.05, 100);
+onLoadProgress((f) => {
+  $('loading-bar').style.width = `${Math.round(f * 100)}%`;
+});
 const { scene, seeds, hitTargets, glow } = await buildScene(renderer);
 $('loading').hidden = true;
 
@@ -119,6 +126,7 @@ function setUpSeeds() {
 // Tweens are stepped by the render loop; each resolves when it finishes.
 const tweens = [];
 function fly(mesh, to, duration, arc = 0.06) {
+  mesh.userData.flying = true;
   return new Promise((resolve) => {
     tweens.push({ mesh, from: mesh.position.clone(), to: to.clone(), t: 0, duration: duration / SPEED, arc, resolve });
   });
@@ -131,8 +139,21 @@ function stepTweens(dt) {
     const e = tw.t < 0.5 ? 2 * tw.t * tw.t : 1 - (-2 * tw.t + 2) ** 2 / 2;
     tw.mesh.position.lerpVectors(tw.from, tw.to, e);
     tw.mesh.position.y += Math.sin(Math.PI * tw.t) * tw.arc;
-    if (tw.t >= 1) { tweens.splice(i, 1); tw.resolve(); }
+    if (tw.t >= 1) { tweens.splice(i, 1); tw.mesh.userData.flying = false; tw.resolve(); }
   }
+}
+
+// Seeds being carried sit in the sower's palm and follow the hand every frame.
+const carry = { seeds: [], palm: null };
+const palmPos = new THREE.Vector3();
+const inHand = (n) => new THREE.Vector3(((n % 3) - 1) * 0.011, -0.012 - Math.floor(n / 3) * 0.008, (((n * 7) % 3) - 1) * 0.008);
+function followHand(dt) {
+  if (!carry.palm || carry.seeds.length === 0) return;
+  carry.palm.getWorldPosition(palmPos);
+  const k = 1 - Math.exp(-dt * 30);
+  carry.seeds.forEach((s, n) => {
+    if (!s.userData.flying) s.position.lerp(inHand(n).add(palmPos), k);
+  });
 }
 
 // ── Game state ──
@@ -143,7 +164,7 @@ let level = 1;
 try { level = Math.min(2, Math.max(0, Number(localStorage.getItem('ayo-level') ?? 1))); } catch { /* storage blocked */ }
 let streak = 0;
 try { streak = Number(localStorage.getItem('ayo-streak')) || 0; } catch { /* storage blocked */ }
-const pose = { me: { reach: 0, reachX: 0, cheer: 0 }, baba: { reach: 0, reachX: 0, cheer: 0 } };
+const pose = { me: { reach: 0, reachToX: 0, cheer: 0 }, baba: { reach: 0, reachToX: 0, cheer: 0 } };
 
 function setMode(next) {
   mode = next;
@@ -168,6 +189,19 @@ document.querySelectorAll('[data-level]').forEach((b) => {
 });
 renderLevels();
 
+function renderSpeeds() {
+  document.querySelectorAll('[data-speed]').forEach((b) => b.setAttribute('aria-pressed', String(Number(b.dataset.speed) === speedLevel)));
+}
+document.querySelectorAll('[data-speed]').forEach((b) => {
+  b.onclick = () => {
+    speedLevel = Number(b.dataset.speed);
+    SPEED = SPEEDS[speedLevel];
+    try { localStorage.setItem('ayo-speed', String(speedLevel)); } catch { /* storage blocked */ }
+    renderSpeeds();
+  };
+});
+renderSpeeds();
+
 function updateScores() {
   $('score-you').textContent = String(game.stores[0]);
   $('score-baba').textContent = String(game.stores[1]);
@@ -180,15 +214,60 @@ function setTurnText(text) {
 
 // speech bubbles over a player's head
 let bubbleTimer = 0;
-function say(text, who = 'baba') {
+function say(text, who = 'baba', ms = 2600) {
   const b = $('bubble');
   b.textContent = text;
   b.dataset.who = who;
   b.hidden = false;
   clearTimeout(bubbleTimer);
-  bubbleTimer = setTimeout(() => { b.hidden = true; }, 2600);
+  bubbleTimer = setTimeout(() => { b.hidden = true; }, ms / Math.sqrt(SPEED));
 }
 const pickLine = (lines) => lines[Math.floor(Math.random() * lines.length)];
+
+// ── First-game lesson: Baba talks you through your first moves and first capture ──
+let taught = false;
+try { taught = localStorage.getItem('ayo-taught') === '1'; } catch { /* storage blocked */ }
+const lesson = { active: false, turns: 0, saidNoCapture: false, pit: -1 };
+function startLesson() {
+  Object.assign(lesson, { active: true, turns: 0, saidNoCapture: false, pit: -1 });
+  $('skip-lesson').hidden = false;
+}
+function endLesson(line) {
+  lesson.active = false;
+  lesson.pit = -1;
+  taught = true;
+  try { localStorage.setItem('ayo-taught', '1'); } catch { /* storage blocked */ }
+  $('skip-lesson').hidden = true;
+  if (line) say(line, 'baba', 5000);
+}
+function lessonTurn(moves) {
+  lesson.turns++;
+  lesson.pit = -1;
+  if (lesson.turns === 1) {
+    say('First time at Ayo? I’ll show you. The near row of six pits is yours.', 'baba', 4500);
+    setTimeout(() => {
+      if (lesson.active && lesson.turns === 1 && game.turn === 0) {
+        say('Pick any pit with seeds. They go round to the right, one in each pit.', 'baba', 6000);
+      }
+    }, 4600 / Math.sqrt(SPEED));
+    return;
+  }
+  if (lesson.turns > 14) return endLesson('You have the idea now. Let’s play properly!');
+  const capture = moves.find((m) => play(game, m).captures.length > 0);
+  if (capture !== undefined) {
+    lesson.pit = capture;
+    say('See the pit that’s glowing? Its last seed makes 2 or 3 in my row, so you capture them. Try it!', 'baba', 7000);
+  } else if (!lesson.saidNoCapture) {
+    lesson.saidNoCapture = true;
+    say('No captures this time. Watch my row: a pit with 1 or 2 seeds is a chance for you.', 'baba', 5500);
+  }
+}
+$('skip-lesson').onclick = () => endLesson('Alright, you know the game. Let’s play!');
+$('replay-lesson').onclick = () => {
+  taught = false;
+  try { localStorage.removeItem('ayo-taught'); } catch { /* storage blocked */ }
+  $('replay-lesson').textContent = 'The lesson will play in your next game';
+};
 
 function startGame() {
   unlock();
@@ -197,11 +276,13 @@ function startGame() {
   yaw = VIEW.yaw;
   pitch = VIEW.pitch;
   dist = VIEW.dist;
+  selected = -1;
   setMode('playing');
   updateScores();
   busy = false;
+  if (!taught) startLesson();
+  else say(pickLine(['Sit down, let’s play!', 'Your turn first, omo mi.', 'Show me what you have.']));
   nextTurn();
-  say(pickLine(['Sit down, let’s play!', 'Your turn first, omo mi.', 'Show me what you have.']));
 }
 
 function nextTurn() {
@@ -213,6 +294,7 @@ function nextTurn() {
     setTurnText(mustFeed ? 'Baba’s row is empty: give him seeds' : 'Your turn: pick one of your pits');
     $('hint').hidden = false;
     if (moves.length === 0) return endGame();
+    if (lesson.active) lessonTurn(moves);
   } else {
     setTurnText('Baba is thinking…');
     $('hint').hidden = true;
@@ -222,6 +304,7 @@ function nextTurn() {
 
 async function babaTurn() {
   busy = true;
+  if (lesson.active && lesson.turns === 1) say('Good! Now it’s my turn. Watch where my seeds go.', 'baba', 3500);
   const t0 = performance.now();
   const move = chooseMove(game, level);
   const think = Math.max(0, (700 + Math.random() * 700) / SPEED - (performance.now() - t0));
@@ -234,6 +317,7 @@ async function babaTurn() {
 async function playerMove(pit) {
   if (mode !== 'playing' || busy || game.turn !== 0 || !legalMoves(game).includes(pit)) return;
   busy = true;
+  selected = -1;
   glow.visible = false;
   $('hint').hidden = true;
   await animateMove(pit);
@@ -244,37 +328,34 @@ async function playerMove(pit) {
 async function animateMove(pit) {
   const mover = game.turn;
   const who = mover === 0 ? pose.me : pose.baba;
+  const person = mover === 0 ? me : baba;
   const result = play(game, pit);
-  const reachTo = (i) => {
-    const x = pitCenter(i).x / 0.25;
-    who.reachX = mover === 0 ? x : -x; // Baba faces the other way
-  };
+  // put the hand over pit i (you sit turned round, so your sideways axis is flipped)
+  const reachTo = (i) => { who.reachToX = mover === 0 ? -pitCenter(i).x : pitCenter(i).x; };
   who.reach = 1;
   reachTo(pit);
   setTurnText(mover === 0 ? 'You sow…' : 'Baba sows…');
+  await wait(260); // the hand travels to the pit
 
-  // pick up every seed in the pit
+  // scoop every seed in the pit into the hand
   const hand = pitSeeds[pit].splice(0);
-  const lift = pitCenter(pit).clone();
-  lift.y = BOARD_TOP + 0.05;
+  person.palm.getWorldPosition(palmPos);
   sfx.pickup();
-  await Promise.all(hand.map((s, n) => fly(s, lift.clone().add(new THREE.Vector3((n % 3 - 1) * 0.009, Math.floor(n / 3) * 0.01, ((n * 7) % 3 - 1) * 0.009)), 0.22, 0.02)));
+  await Promise.all(hand.map((s, n) => fly(s, inHand(n).add(palmPos), 0.2, 0.03)));
+  carry.palm = person.palm;
+  carry.seeds = hand;
 
-  // sow one seed per pit
-  for (let k = 0; k < result.path.length; k++) {
-    const target = result.path[k];
-    const seed = hand.shift();
+  // the hand moves along the pits, dropping one seed into each
+  for (const target of result.path) {
     reachTo(target);
+    await wait(150);
+    const seed = carry.seeds.shift();
     pitSeeds[target].push(seed);
     const n = pitSeeds[target].length - 1;
-    fly(seed, seedSlot(target, n, seed.userData.id), 0.24, 0.035).then(() => { sfx.clack(); refreshCount(target); });
-    // the rest of the hand follows along above the board
-    const hover = pitCenter(target).clone();
-    hover.y = BOARD_TOP + 0.05;
-    hand.forEach((s, m) => fly(s, hover.clone().add(new THREE.Vector3((m % 3 - 1) * 0.009, Math.floor(m / 3) * 0.01, 0)), 0.2, 0.005));
-    await wait(170);
+    fly(seed, seedSlot(target, n, seed.userData.id), 0.2, 0.015).then(() => sfx.clack());
   }
   await wait(280);
+  carry.palm = null;
   who.reach = 0;
 
   // captures fly into the mover's store
@@ -292,6 +373,7 @@ async function animateMove(pit) {
       $(`count-${c.pit}`).classList.remove('captured');
     }
     if (mover === 1) say(pickLine([`Ehen! ${total} for Baba.`, 'You see am?', 'Na so we dey do am!', 'Thank you o!']));
+    else if (lesson.active) endLesson(`Ehen! Those ${total} seeds are yours now. First to 25 seeds wins. Go on, try to beat me!`);
     else say(pickLine([`Ah! You took ${total}.`, 'Omo mi, you sabi!', 'Hmm, not bad at all.', 'I see you o!']));
   } else if (result.grandSlam) {
     say(mover === 0 ? 'You can’t take all my seeds at once!' : 'Too greedy, I’ll leave them.');
@@ -325,6 +407,7 @@ async function endGame() {
   setTurnText('');
   $('hint').hidden = true;
   updateScores();
+  if (lesson.active) endLesson();
   const [mine, his] = game.stores;
   const won = game.winner === 0;
   const lost = game.winner === 1;
@@ -406,9 +489,6 @@ for (let i = 0; i < 14; i++) {
   $('counts').append(el);
   counts.push(el);
 }
-function refreshCount(i) {
-  counts[i].textContent = String(pitSeeds[i].length);
-}
 const tmp = new THREE.Vector3();
 function placeCounts() {
   for (let i = 0; i < 14; i++) {
@@ -450,6 +530,49 @@ function canPlay(pit) {
   return mode === 'playing' && !busy && game.turn === 0 && legalMoves(game).includes(pit);
 }
 
+// ── Move preview (Easy and Normal, and during the lesson) ──
+// Shows where the last seed will land, and what it would capture.
+const previewOn = () => level < 2 || lesson.active;
+const landRing = glow.clone();
+landRing.material = glow.material.clone();
+scene.add(landRing);
+let previewKey = null;
+function showPreview(pit) {
+  const key = pit < 0 ? '' : `${pit}:${game.pits.join(',')}`;
+  if (key === previewKey) return;
+  previewKey = key;
+  for (const el of counts) {
+    el.classList.remove('path', 'land', 'gain');
+    delete el.dataset.gain;
+  }
+  landRing.visible = false;
+  const hint = $('hint');
+  if (pit < 0) {
+    hint.textContent = previewOn() ? (matchMedia('(pointer: coarse)').matches ? 'Tap a pit to see where it goes, tap again to play' : 'Point at a pit to see where it goes, click to play') : 'Tap a glowing number, or press 1–6';
+    return;
+  }
+  const r = play(game, pit);
+  const last = r.path[r.path.length - 1];
+  for (const i of r.path) counts[i].classList.add('path');
+  counts[last].classList.add('land');
+  const taken = r.captures.reduce((n, c) => n + c.count, 0);
+  for (const c of r.captures) {
+    counts[c.pit].classList.add('gain');
+    counts[c.pit].dataset.gain = `+${c.count}`;
+  }
+  const c = pitCenter(last);
+  landRing.position.set(c.x, BOARD_TOP + 0.004, c.z);
+  landRing.material.color.set(taken ? '#ff7a59' : '#7fc8ff');
+  landRing.visible = true;
+  const tap = selected === pit ? ' Tap again to play.' : '';
+  const seeds = r.path.length === 1 ? '1 seed' : `${r.path.length} seeds`;
+  hint.textContent = taken
+    ? `${seeds}: captures ${taken}!${tap}`
+    : r.grandSlam
+      ? `That would take all of Baba’s seeds, so it captures nothing.${tap}`
+      : `${seeds}: the last lands in ${last < 6 ? 'your' : 'Baba’s'} row.${tap}`;
+}
+
 // Drag to look around; a click without much movement picks a pit.
 const VIEW = { yaw: 0.76, pitch: 0.95, dist: 1.8 }; // up and to your right, looking past your shoulder
 let yaw = VIEW.yaw;
@@ -477,10 +600,18 @@ renderer.domElement.addEventListener('pointermove', (e) => {
   hovered = canPlay(pit) ? pit : -1;
   renderer.domElement.style.cursor = hovered >= 0 ? 'pointer' : drag && drag.moved > 6 ? 'grabbing' : 'grab';
 });
+// Mouse: hover shows the preview and a click plays. Touch: the first tap on a pit shows its
+// preview, a second tap on the same pit plays it.
+let selected = -1;
 renderer.domElement.addEventListener('pointerup', (e) => {
   if (drag && drag.id === e.pointerId && drag.moved <= 6) {
     const pit = pitAt(e.clientX, e.clientY);
-    if (canPlay(pit)) playerMove(pit);
+    if (canPlay(pit)) {
+      if (e.pointerType === 'mouse' || pit === selected || !previewOn()) playerMove(pit);
+      else selected = pit;
+    } else {
+      selected = -1;
+    }
   }
   drag = null;
 });
@@ -507,6 +638,7 @@ function frame() {
   const dt = Math.min(clock.getDelta(), 0.05);
   time += dt;
   stepTweens(dt);
+  followHand(dt);
   // the menu slowly circles from your back to your face, framing both players
   const menu = mode === 'menu' && !cover;
   const tall = Math.max(0, 1 / camera.aspect - 1);
@@ -525,17 +657,20 @@ function frame() {
     look.z + Math.cos(yaw) * Math.cos(p) * d,
   );
   camera.lookAt(look);
-  if (me) me.animate(dt, { ...pose.me, time });
+  if (me) me.animate(dt, { ...pose.me, time, leanIn: mode === 'cover' ? 1 : 0.35 });
   baba.animate(dt, { ...pose.baba, time: time + 1.3 });
 
-  if (hovered >= 0 && canPlay(hovered)) {
-    const c = pitCenter(hovered);
+  // the pit being considered: hovered (mouse), tapped once (touch), or the one Baba points to
+  const focusPit = [hovered, selected, lesson.pit].find((p) => p >= 0 && canPlay(p)) ?? -1;
+  if (focusPit >= 0) {
+    const c = pitCenter(focusPit);
     glow.position.set(c.x, BOARD_TOP + 0.004, c.z);
     glow.material.opacity = 0.65 + Math.sin(time * 6) * 0.25;
     glow.visible = true;
   } else {
     glow.visible = false;
   }
+  showPreview(previewOn() ? focusPit : -1);
   document.querySelectorAll('.count.mine').forEach((el, i) => el.classList.toggle('playable', mode === 'playing' && game.turn === 0 && !busy && legalMoves(game).includes(i)));
   placeCounts();
   renderer.render(scene, camera);
@@ -573,7 +708,7 @@ if (cover) {
   pitch = 0.26;
   dist = 2.75;
   pose.me.reach = 1;
-  pose.me.reachX = 0.3;
+  pose.me.reachToX = 0.05;
   camera.setViewOffset(innerWidth, innerHeight, -innerWidth * 0.12, 0, innerWidth, innerHeight);
   mode = 'cover';
 }
@@ -593,6 +728,7 @@ if (params.has('debug')) {
       endGame();
     },
     pitSeeds: () => pitSeeds.map((p) => p.length),
+    lessonPit: () => lesson.pit,
     screenOf: (i) => {
       const v = pitCenter(i).project(camera);
       return { x: (v.x * 0.5 + 0.5) * innerWidth, y: (-v.y * 0.5 + 0.5) * innerHeight };

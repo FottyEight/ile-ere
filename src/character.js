@@ -108,6 +108,10 @@ export function buildCharacter(rawStyle) {
     mesh(new THREE.SphereGeometry(0.068, 10, 8), skin, pivot, 0, -0.6, 0);
     return pivot;
   });
+  // a point just under the right hand's palm, where carried seeds sit
+  const palm = new THREE.Object3D();
+  palm.position.set(0, -0.66, 0.03);
+  arms[1].add(palm);
 
   // ── Head ──
   const headY = torsoTop + 0.29;
@@ -247,18 +251,27 @@ export function buildCharacter(rawStyle) {
   }
 
   // ── Poses ──
-  // Seated at the board. `reach` (0–1) stretches the right arm out over the board, toward
-  // `reachX` (−1 left … 1 right); `cheer` (0–1) raises both arms.
+  // Seated at the board. `reach` (0–1) stretches the reaching arm out over the board, so the
+  // hand is above `reachToX` (sideways, in the character's own metres); `cheer` (0–1) raises
+  // both arms.
   const SEAT_DROP = hipY - 0.46; // hips rest on a 0.46 m stool
+  const ARM_LEN = 0.62;
+  const shoulderX = shoulderR + 0.05;
   let reachNow = 0;
   let cheerNow = 0;
-  function animate(dt, { reach = 0, reachX = 0, cheer = 0, time = 0 } = {}) {
+  let swingNow = 0.15;
+  // `leanIn` scales how far the body tips forward when reaching (the player leans less, so
+  // their head doesn't block the camera's view of the board).
+  function animate(dt, { reach = 0, reachToX = 0, cheer = 0, time = 0, leanIn = 1 } = {}) {
     const k = Math.min(1, dt * 10);
     reachNow += (reach - reachNow) * k;
+    // sideways swing that puts the hand over reachToX (rotating about z moves the hand along x)
+    const swing = reach > 0 ? Math.asin(THREE.MathUtils.clamp((reachToX - shoulderX) / ARM_LEN, -0.95, 0.95)) : 0.15;
+    swingNow += (swing - swingNow) * Math.min(1, dt * 14);
     cheerNow += (cheer - cheerNow) * Math.min(1, dt * 6);
     // Lean in from the hips: the body tips forward around the hip point, and the legs
     // counter-rotate so the feet stay on the floor.
-    const lean = 0.1 + reachNow * 0.47;
+    const lean = 0.1 + reachNow * 0.47 * leanIn;
     body.rotation.x = lean;
     body.position.set(0, -SEAT_DROP + hipY * (1 - Math.cos(lean)) + Math.sin(time * 1.6) * 0.004, -hipY * Math.sin(lean));
     for (let i = 0; i < 2; i++) {
@@ -275,7 +288,7 @@ export function buildCharacter(rawStyle) {
     arms[0].rotation.z = -0.15 - 0.3 * cheerNow + wave;
     const reachAngle = -((0.65 + 0.3 * reachNow) + lean);
     arms[1].rotation.x = reachAngle * (1 - cheerNow) - 2.7 * cheerNow;
-    arms[1].rotation.z = 0.15 + (-reachX * 0.5 - 0.12) * reachNow + 0.3 * cheerNow - wave;
+    arms[1].rotation.z = swingNow * (1 - cheerNow) + 0.45 * cheerNow - wave;
   }
 
   function dispose() {
@@ -284,5 +297,5 @@ export function buildCharacter(rawStyle) {
   }
 
   animate(0);
-  return { root, body, headY, animate, dispose, style };
+  return { root, body, headY, palm, animate, dispose, style };
 }

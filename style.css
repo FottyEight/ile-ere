@@ -15,7 +15,9 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #3b2a1e; col
 button { font: inherit; color: inherit; cursor: pointer; }
 [hidden] { display: none !important; }
 
-.loading { position: fixed; inset: 0; display: grid; place-items: center; z-index: 20; background: #3b2a1e; font-size: 18px; color: var(--dim); }
+.loading { position: fixed; inset: 0; display: grid; place-items: center; z-index: 20; background: #3b2a1e; font-size: 18px; color: var(--dim); text-align: center; }
+.loading-track { width: min(260px, 70vw); height: 8px; margin: 12px auto 0; border-radius: 999px; background: rgba(255,255,255,.1); overflow: hidden; }
+#loading-bar { width: 0; height: 100%; background: var(--gold); transition: width .2s; }
 
 /* start.ng profile card */
 .card { position: fixed; top: 16px; left: 16px; z-index: 5; display: flex; align-items: center; gap: 12px;
@@ -52,6 +54,16 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .count.store { font-size: 16px; padding: 2px 9px; background: rgba(30, 22, 15, .9); }
 .count.playable { background: var(--gold); color: #2b1f16; border-color: transparent; }
 .count.captured { background: #ff7a59; color: #fff; transform-origin: center; }
+/* move preview: pits the seeds pass through, where the last one lands, what it captures */
+.count.path { box-shadow: 0 0 0 2px rgba(127, 200, 255, .75); }
+.count.land { background: #7fc8ff; color: #10202b; }
+.count.gain { background: #ff7a59; color: #fff; }
+.count.gain::after { content: attr(data-gain); margin-left: 4px; font-size: 11px; }
+.skip { position: absolute; right: 16px; bottom: 18px; pointer-events: auto; border: 1px solid var(--edge); border-radius: 999px;
+  padding: 7px 14px; background: var(--panel); font-weight: 700; font-size: 13px; }
+.spaced { margin-top: 14px; }
+.levels.small button { padding: 7px; font-size: 13px; }
+.wide { width: 100%; margin-top: 12px; }
 
 .bubble { position: fixed; left: 0; top: 0; z-index: 6; max-width: 240px; padding: 8px 12px; border-radius: 14px; background: #fffaf2; color: #2b1f16;
   font-weight: 700; font-size: 14px; box-shadow: 0 6px 18px rgba(0,0,0,.3); pointer-events: none; }
