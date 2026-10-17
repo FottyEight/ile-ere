@@ -3,7 +3,7 @@ import { buildScene, onLoadProgress, pitCenter, storeCenter, seedSlot, storeSlot
 import { buildCharacter, styleKey } from './character.js';
 import { newGame, play, legalMoves, chooseMove } from './ayo.js';
 import { whoami, saveRun, leaderboard, signIn, onStartNg, cameAsGuest, FALLBACK_GUEST } from './startng.js';
-import { unlock, sfx, toggleMute, isMuted } from './sound.js';
+import { unlock, sfx, toggleMute, isMuted, setAmbience, toggleRadio, radioPlaying, okada, cluck } from './sound.js';
 
 const params = new URLSearchParams(location.search);
 const $ = (id) => document.getElementById(id);
@@ -28,8 +28,23 @@ const camera = new THREE.PerspectiveCamera(36, innerWidth / innerHeight, 0.05, 1
 onLoadProgress((f) => {
   $('loading-bar').style.width = `${Math.round(f * 100)}%`;
 });
-const { scene, seeds, hitTargets, glow } = await buildScene(renderer);
+const { scene, seeds, hitTargets, glow, setTimeOfDay, chickens, radio, setRadioLight } = await buildScene(renderer);
 $('loading').hidden = true;
+
+// The time of day follows the player's clock (?time=day|evening|night to try one).
+const hour = new Date().getHours();
+const timeOfDay = ['day', 'evening', 'night'].includes(params.get('time'))
+  ? params.get('time')
+  : hour >= 6 && hour < 16 ? 'day' : hour >= 16 && hour < 19 ? 'evening' : 'night';
+setTimeOfDay(timeOfDay);
+setAmbience(timeOfDay);
+$('lead-time').textContent = {
+  day: 'It’s a quiet afternoon on the verandah.',
+  evening: 'The sun is going down over the verandah.',
+  night: 'NEPA has taken light, so the lantern is lit on the verandah.',
+}[timeOfDay];
+if (timeOfDay === 'night') chickens.forEach((c) => { c.visible = false; }); // gone to roost
+setRadioLight(radioPlaying());
 
 // ── People at the board ──
 const ELDER_STYLE = {
@@ -312,8 +327,11 @@ async function babaTurn() {
   if (lesson.active && lesson.turns === 1) say('Good! Now it’s my turn. Watch where my seeds go.', 'baba', 3500);
   const t0 = performance.now();
   const move = chooseMove(game, level);
-  const think = Math.max(0, (700 + Math.random() * 700) / SPEED - (performance.now() - t0));
-  await new Promise((r) => setTimeout(r, think));
+  // now and then Baba strokes his chin and takes his time over a move
+  const ponder = level > 0 && Math.random() < 0.35;
+  const thinkMs = (ponder ? 1900 + Math.random() * 900 : 700 + Math.random() * 700) / SPEED;
+  if (ponder) baba.gesture('chin', thinkMs / 1000 + 0.2);
+  await new Promise((r) => setTimeout(r, Math.max(0, thinkMs - (performance.now() - t0))));
   await animateMove(move);
   busy = false;
   nextTurn();
@@ -336,7 +354,11 @@ async function animateMove(pit) {
   const person = mover === 0 ? me : baba;
   const result = play(game, pit);
   // put the hand over pit i (you sit turned round, so your sideways axis is flipped)
-  const reachTo = (i) => { who.reachToX = mover === 0 ? -pitCenter(i).x : pitCenter(i).x; };
+  const reachTo = (i) => {
+    who.reachToX = mover === 0 ? -pitCenter(i).x : pitCenter(i).x;
+    sowing.mover = mover;
+    sowing.pit = i; // both players watch the pit being sown
+  };
   who.reach = 1;
   reachTo(pit);
   setTurnText(mover === 0 ? 'You sow…' : 'Baba sows…');
@@ -362,6 +384,7 @@ async function animateMove(pit) {
   }
   await wait(280);
   carry.palm = null;
+  sowing.pit = -1;
   who.grip = 0;
   who.reach = 0;
 
@@ -379,10 +402,19 @@ async function animateMove(pit) {
       }));
       $(`count-${c.pit}`).classList.remove('captured');
     }
-    if (mover === 1) say(pickLine([`Ehen! ${total} for Baba.`, 'You see am?', 'Na so we dey do am!', 'Thank you o!']));
-    else if (lesson.active) endLesson(`Ehen! Those ${total} seeds are yours now. First to 25 seeds wins. Go on, try to beat me!`);
-    else say(pickLine([`Ah! You took ${total}.`, 'Omo mi, you sabi!', 'Hmm, not bad at all.', 'I see you o!']));
+    // reactions: Baba laughs at a big haul and is taken aback when you make one
+    if (mover === 1) {
+      baba.gesture(total >= 4 ? 'laugh' : 'nod', total >= 4 ? 1.8 : 1.1);
+      me?.gesture(total >= 4 ? 'shake' : 'nod', 1.2);
+      say(pickLine(total >= 4 ? [`Ehen! ${total} for Baba!`, 'Haha! You no see am coming?', 'Baba never old o!'] : [`Ehen! ${total} for Baba.`, 'You see am?', 'Na so we dey do am!', 'Thank you o!']));
+    } else {
+      baba.gesture(total >= 4 ? 'surprise' : 'nod', total >= 4 ? 1.7 : 1.1);
+      me?.gesture('nod', 1);
+      if (lesson.active) endLesson(`Ehen! Those ${total} seeds are yours now. First to 25 seeds wins. Go on, try to beat me!`);
+      else say(pickLine(total >= 4 ? [`Ah! ${total}? Omo mi!`, 'Who taught you this one?', 'Ehn! You don wake up today!'] : [`Ah! You took ${total}.`, 'Omo mi, you sabi!', 'Hmm, not bad at all.', 'I see you o!']));
+    }
   } else if (result.grandSlam) {
+    (mover === 0 ? baba : me)?.gesture('shake', 1.3);
     say(mover === 0 ? 'You can’t take all my seeds at once!' : 'Too greedy, I’ll leave them.');
   }
 
@@ -409,6 +441,56 @@ function checkSync() {
   }
 }
 
+// ── Baba's proverbs, one after each game ──
+const PROVERBS = [
+  ['Bí ọmọdé bá mọ ọwọ́ wẹ̀, á bá àgbà jẹun.', 'If a child learns to wash their hands, they eat with the elders.'],
+  ['Ìgbà kan ń lọ, ìgbà kan ń bọ̀.', 'One season goes, another comes.'],
+  ['Sùúrù ni baba ìwà.', 'Patience is the father of good character.'],
+  ['Ọ̀rọ̀ púpọ̀ kò kún agbọ̀n.', 'Many words do not fill a basket.'],
+  ['Díẹ̀díẹ̀ ni imú elédè ń wọ ọgbà.', 'Little by little, the pig’s snout gets into the garden.'],
+  ['Ìkòkò tí yóò jẹ ata, ìdí rẹ̀ á gbóná.', 'The pot that will cook pepper soup must bear the fire.'],
+  ['Ọwọ́ ọmọdé kò tó pẹpẹ, tàgbàlagbà kò wọ akèrègbè.', 'A child’s hand can’t reach the high shelf; an elder’s hand can’t fit in the gourd.'],
+  ['Ẹni tí yóò jẹ oyin inú àpáta kì í wo ẹnu àáké.', 'Whoever wants honey from the rock does not fear the axe’s edge.'],
+];
+let proverbIndex = Math.floor(Math.random() * PROVERBS.length);
+function showProverb() {
+  const [yo, en] = PROVERBS[proverbIndex++ % PROVERBS.length];
+  $('proverb-yo').textContent = `“${yo}”`;
+  $('proverb-en').textContent = en;
+}
+
+// ── Your record against Baba, kept in this browser ──
+let record = { levels: [{ w: 0, l: 0, d: 0 }, { w: 0, l: 0, d: 0 }, { w: 0, l: 0, d: 0 }], bestStreak: 0, mostSeeds: 0 };
+try {
+  const saved = JSON.parse(localStorage.getItem('ayo-record'));
+  if (saved?.levels?.length === 3) record = saved;
+} catch { /* storage blocked or empty */ }
+function recordGame(won, lost, seeds) {
+  const r = record.levels[level];
+  if (won) r.w++; else if (lost) r.l++; else r.d++;
+  record.bestStreak = Math.max(record.bestStreak, streak);
+  if (won) record.mostSeeds = Math.max(record.mostSeeds, seeds);
+  try { localStorage.setItem('ayo-record', JSON.stringify(record)); } catch { /* storage blocked */ }
+  renderRecord();
+}
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+function recordLine(l) {
+  const r = record.levels[l];
+  return `Against ${LEVELS[l]} Baba: ${plural(r.w, 'win')}, ${r.l} ${r.l === 1 ? 'loss' : 'losses'}${r.d ? `, ${plural(r.d, 'draw')}` : ''}`;
+}
+function renderRecord() {
+  const played = record.levels.some((r) => r.w + r.l + r.d > 0);
+  $('record').hidden = !played;
+  if (!played) return;
+  $('record-rows').replaceChildren(...record.levels.map((r, i) => {
+    const li = document.createElement('li');
+    li.innerHTML = `<span>${LEVELS[i]}</span><b>${r.w}–${r.l}${r.d ? `–${r.d}` : ''}</b>`;
+    return li;
+  }));
+  $('record-best').textContent = `Best streak: ${record.bestStreak}${record.mostSeeds ? ` · Most seeds in a win: ${record.mostSeeds}` : ''}`;
+}
+renderRecord();
+
 async function endGame() {
   setMode('over');
   setTurnText('');
@@ -419,16 +501,23 @@ async function endGame() {
   const won = game.winner === 0;
   const lost = game.winner === 1;
   pose.me.cheer = won ? 1 : 0;
-  pose.baba.cheer = lost ? 1 : 0;
+  // Baba claps for you when you win, and has a good laugh when he does
+  if (won) baba.gesture('clap', 3.2);
+  else if (lost) baba.gesture('laugh', 2.6);
+  else baba.gesture('nod', 1.4);
+  if (lost) me?.gesture('shake', 1.4);
   if (won) sfx.win(); else sfx.lose();
   $('over-title').textContent = won ? 'You beat Baba!' : lost ? 'Baba wins this one' : 'It’s a draw';
   $('over-you').textContent = String(mine);
   $('over-baba').textContent = String(his);
   say(won ? pickLine(['Ah, you sabi this game!', 'Well played, omo mi!']) : lost ? pickLine(['Baba never old!', 'Come back tomorrow, I’ll still be here.']) : 'We are equal today.');
+  showProverb();
 
   if (level > 0) streak = won ? streak + 1 : 0;
   try { localStorage.setItem('ayo-streak', String(streak)); } catch { /* storage blocked */ }
   $('over-streak').textContent = level === 0 ? 'Practice game (Easy)' : `Win streak: ${streak}`;
+  recordGame(won, lost, mine);
+  $('over-record').textContent = recordLine(level);
 
   const status = $('over-status');
   $('over-signin').hidden = true;
@@ -478,7 +567,7 @@ async function renderBoard() {
 }
 
 $('play').onclick = startGame;
-$('again').onclick = () => { pose.me.cheer = pose.baba.cheer = 0; setMode('menu'); renderLevels(); };
+$('again').onclick = () => { pose.me.cheer = pose.baba.cheer = 0; setMode('menu'); renderLevels(); renderRecord(); };
 $('rules-open').onclick = () => { $('rules').hidden = false; };
 $('rules-close').onclick = () => { $('rules').hidden = true; };
 $('mute').textContent = isMuted() ? '\u{1F507}' : '\u{1F50A}';
@@ -615,7 +704,12 @@ let selected = -1;
 renderer.domElement.addEventListener('pointerup', (e) => {
   if (drag && drag.id === e.pointerId && drag.moved <= 6) {
     const pit = pitAt(e.clientX, e.clientY);
-    if (canPlay(pit)) {
+    if (pit < 0 && raycaster.intersectObject(radio).length) {
+      // clicking the radio switches the music on or off
+      const on = toggleRadio();
+      setRadioLight(on);
+      toast(on ? 'Baba’s radio is on 🎶' : 'Radio off', 1600);
+    } else if (canPlay(pit)) {
       if (e.pointerType === 'mouse' || pit === selected || !previewOn()) playerMove(pit);
       else selected = pit;
     } else {
@@ -633,6 +727,119 @@ addEventListener('keydown', (e) => {
   else if (e.key === 'm' || e.key === 'M') $('mute').click();
   else if (e.key === 'Enter' && mode === 'menu') startGame();
 });
+
+// ── Life on the verandah ──
+// Where people look: the pit being sown, the pit you're considering, each other when talking,
+// and now and then Baba glances up at you while you think.
+const tmpV = new THREE.Vector3();
+function lookToward(person, flipped, target) {
+  const h = person.head.getWorldPosition(tmpV);
+  let dx = target.x - h.x;
+  const dy = target.y - h.y;
+  let dz = target.z - h.z;
+  if (flipped) { dx = -dx; dz = -dz; } // you sit turned round
+  return { yaw: Math.atan2(dx, dz), pitch: Math.atan2(-dy, Math.hypot(dx, dz)) - person.body.rotation.x };
+}
+const sowing = { mover: -1, pit: -1 };
+let glanceIn = 3;
+let glanceFor = 0;
+let babaLooksAway = null; // { target, until }
+const boardCentre = new THREE.Vector3(0, BOARD_TOP, 0);
+const headOf = (person) => person.head.getWorldPosition(new THREE.Vector3());
+function looks(dt) {
+  const babaTalking = !$('bubble').hidden && $('bubble').dataset.who === 'baba';
+  const pitPoint = (i) => pitCenter(i);
+  // Baba
+  let bt = boardCentre;
+  if (babaLooksAway && time < babaLooksAway.until) bt = babaLooksAway.target;
+  else if (sowing.pit >= 0) bt = pitPoint(sowing.pit);
+  else if (mode === 'over' || mode === 'menu' || babaTalking) bt = me ? headOf(me) : boardCentre;
+  else if (mode === 'playing' && game.turn === 0) {
+    glanceIn -= dt;
+    if (glanceIn <= 0) { glanceFor = 1.2; glanceIn = 3 + Math.random() * 5; }
+    glanceFor -= dt;
+    const considering = [hovered, selected].find((p) => p >= 0);
+    bt = glanceFor > 0 && me ? headOf(me) : considering !== undefined ? pitPoint(considering) : boardCentre;
+  }
+  // you
+  let mt = boardCentre;
+  if (sowing.pit >= 0) mt = pitPoint(sowing.pit);
+  else if (babaTalking || mode === 'over') mt = headOf(baba);
+  else {
+    const considering = [hovered, selected, lesson.pit].find((p) => p >= 0);
+    if (considering !== undefined) mt = pitPoint(considering);
+  }
+  return { baba: lookToward(baba, false, bt), me: me ? lookToward(me, true, mt) : null };
+}
+
+// Chickens potter about the open end of the verandah, stopping to peck.
+const coop = { minX: 1.6, maxX: 3.9, minZ: -1.7, maxZ: 1.9 };
+function newSpot(c) {
+  c.userData.target.set(
+    THREE.MathUtils.randFloat(coop.minX, coop.maxX), 0,
+    THREE.MathUtils.randFloat(coop.minZ, coop.maxZ),
+  );
+}
+chickens.forEach(newSpot);
+function stepChickens(dt) {
+  for (const c of chickens) {
+    if (!c.visible) continue;
+    const u = c.userData;
+    if (u.wait > 0) {
+      u.wait -= dt;
+      u.peck += dt;
+      u.head.rotation.x = Math.max(0, Math.sin(u.peck * 9)) * 0.9; // peck, peck
+      if (u.wait <= 0) newSpot(c);
+      continue;
+    }
+    const to = tmpV.subVectors(u.target, c.position);
+    const d = to.length();
+    if (d < 0.05) {
+      u.wait = 1 + Math.random() * 3;
+      u.peck = 0;
+      if (Math.random() < 0.3) cluck();
+      continue;
+    }
+    const heading = Math.atan2(to.x, to.z);
+    let turn = heading - c.rotation.y;
+    turn = Math.atan2(Math.sin(turn), Math.cos(turn));
+    c.rotation.y += turn * Math.min(1, dt * 6);
+    const speed = 0.32;
+    c.position.addScaledVector(to.normalize(), Math.min(d, speed * dt));
+    u.head.rotation.x = Math.sin(time * 14) * 0.15; // head bobs as it walks
+    u.legs[0].rotation.x = Math.sin(time * 14) * 0.5;
+    u.legs[1].rotation.x = -Math.sin(time * 14) * 0.5;
+  }
+}
+
+// A neighbour greets Baba from the road now and then; okadas go past.
+function toast(text, ms = 3500) {
+  const t = $('toast');
+  t.textContent = text;
+  t.hidden = false;
+  clearTimeout(toast.timer);
+  toast.timer = setTimeout(() => { t.hidden = true; }, ms);
+}
+const GREETING = {
+  day: ['A neighbour passing by: “Baba, ẹ kú ọ̀sán o!” (good afternoon)', 'Ẹ kú ọ̀sán o! Ẹ ṣé.'],
+  evening: ['A neighbour passing by: “Baba, ẹ kú ìrọ̀lẹ́ o!” (good evening)', 'Ẹ kú ìrọ̀lẹ́ o! Ẹ ṣé.'],
+  night: ['A neighbour passing by: “Baba, ẹ kú alẹ́ o!” (good night)', 'Ẹ kú alẹ́ o! Ó dàárọ̀.'],
+};
+let okadaIn = 18 + Math.random() * 20;
+let neighbourIn = 45 + Math.random() * 45;
+function stepStreet(dt) {
+  if (mode === 'cover') return;
+  okadaIn -= dt;
+  if (okadaIn <= 0) { okada(); okadaIn = 25 + Math.random() * 35; }
+  neighbourIn -= dt;
+  if (neighbourIn <= 0 && !busy && $('bubble').hidden && !lesson.active) {
+    neighbourIn = 60 + Math.random() * 60;
+    const [line, reply] = GREETING[timeOfDay];
+    toast(line);
+    babaLooksAway = { target: new THREE.Vector3(5, 1.5, 0.6), until: time + 2.2 };
+    setTimeout(() => { baba.gesture('nod', 1.2); say(reply, 'baba', 2400); }, 1100);
+  }
+}
 
 // ── Loop ──
 // On your turn the camera looks at the board; on Baba's turn it eases up to show him too.
@@ -666,8 +873,11 @@ function frame() {
     look.z + Math.cos(yaw) * Math.cos(p) * d,
   );
   camera.lookAt(look);
-  if (me) me.animate(dt, { ...pose.me, time, leanIn: mode === 'cover' ? 1 : 0.35 });
-  baba.animate(dt, { ...pose.baba, time: time + 1.3 });
+  const gaze = looks(dt);
+  if (me) me.animate(dt, { ...pose.me, time, leanIn: mode === 'cover' ? 1 : 0.35, look: gaze.me });
+  baba.animate(dt, { ...pose.baba, time: time + 1.3, look: gaze.baba });
+  stepChickens(dt);
+  stepStreet(dt);
 
   // the pit being considered: hovered (mouse), tapped once (touch), or the one Baba points to
   const focusPit = [hovered, selected, lesson.pit].find((p) => p >= 0 && canPlay(p)) ?? -1;
@@ -738,6 +948,8 @@ if (params.has('debug')) {
     },
     pitSeeds: () => pitSeeds.map((p) => p.length),
     lessonPit: () => lesson.pit,
+    baba,
+    get me() { return me; },
     screenOf: (i) => {
       const v = pitCenter(i).project(camera);
       return { x: (v.x * 0.5 + 0.5) * innerWidth, y: (-v.y * 0.5 + 0.5) * innerHeight };

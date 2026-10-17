@@ -21,6 +21,11 @@ Controls: click or tap one of your pits (or press 1–6). Drag to look around, s
 - **Baba's lesson:** your first game starts with Baba walking you through it: your row, how sowing goes round, and (as soon as you have one) a glowing pit that captures. You can skip it, or replay it from the **?** sheet.
 - **Move preview** (Easy and Normal): point at one of your pits, or tap it once on a phone, to see the pits its seeds pass through, where the last one lands, and what it would capture. Tap again to play.
 - **Animation speed:** Normal, Fast or Very fast, in the menu.
+- **Baba is alive:** he blinks, watches the seeds, glances up at you while you think, strokes his chin over a hard move, laughs at a big capture, looks surprised at yours, and claps when you beat him. After each game he leaves you a Yoruba proverb with its meaning.
+- **The verandah:** the time of day follows your clock (afternoon, golden evening, or night by lantern with crickets). Chickens potter about, okadas pass on the road, neighbours greet Baba, and his radio plays highlife (click the radio to switch it off).
+- **Your record:** wins, losses and draws against each level of Baba, your best streak and your biggest win, kept in your browser.
+
+Try a time of day locally with `?time=day`, `?time=evening` or `?time=night`.
 
 ## Your start.ng character
 

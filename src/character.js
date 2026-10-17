@@ -135,15 +135,19 @@ export function buildCharacter(rawStyle) {
     l.rotation.z = Math.PI / 2;
     l.scale.set(1, w, 0.7);
   }
-  // eyes, brows and ears
+  // eyes (with lids that blink), brows that lift, and ears
+  const lids = [];
+  const brows = [];
   for (const side of [-1, 1]) {
     const eye = group(head, side * R * 0.36, R * 0.13, R * 0.74);
     mesh(new THREE.SphereGeometry(R * 0.15, 14, 12), white, eye);
     mesh(new THREE.SphereGeometry(R * 0.085, 12, 10), iris, eye, 0, 0, R * 0.09);
     const lid = mesh(new THREE.SphereGeometry(R * 0.165, 14, 8, 0, Math.PI * 2, 0, Math.PI * 0.42), skin, eye);
     lid.rotation.x = 0.35;
+    lids.push(lid);
     const brow = mesh(new THREE.CapsuleGeometry(R * 0.035, R * 0.26, 4, 8), hair, head, side * R * 0.37, R * 0.38, R * 0.86);
     brow.rotation.z = Math.PI / 2 + side * 0.12;
+    brows.push(brow);
     const ear = mesh(new THREE.SphereGeometry(R * 0.26, 12, 10), skin, head, side * R * 0.87, -R * 0.02, -R * 0.05);
     ear.scale.set(0.38, 1, 0.68);
   }
@@ -373,7 +377,22 @@ export function buildCharacter(rawStyle) {
   let cheerNow = 0;
   let gripNow = 0.3;
   let swingNow = -0.1;
-  function animate(dt, { reach = 0, reachToX = 0, cheer = 0, time = 0, leanIn = 1, grip = 0 } = {}) {
+  // where the head looks (yaw: + is to the character's left; pitch: + is down), eased
+  const lookNow = { yaw: 0, pitch: 0.15 };
+  // blinking every few seconds
+  let blinkIn = 1 + Math.random() * 3;
+  let blinkT = -1;
+  // a short gesture: 'nod', 'shake', 'chin', 'laugh', 'clap' or 'surprise'
+  let gestureName = null;
+  let gestureT = 0;
+  let gestureLen = 1;
+  function gesture(name, seconds = 1.5) {
+    gestureName = name;
+    gestureT = 0;
+    gestureLen = seconds;
+  }
+
+  function animate(dt, { reach = 0, reachToX = 0, cheer = 0, time = 0, leanIn = 1, grip = 0, look = null } = {}) {
     const k = Math.min(1, dt * 10);
     reachNow += (reach - reachNow) * k;
     cheerNow += (cheer - cheerNow) * Math.min(1, dt * 6);
@@ -383,37 +402,103 @@ export function buildCharacter(rawStyle) {
     const swing = reach > 0 ? Math.asin(THREE.MathUtils.clamp((reachToX - reachShoulderX) / 0.6, -0.95, 0.95)) : 0.07;
     swingNow += (swing - swingNow) * Math.min(1, dt * 14);
 
+    // gesture strength: eases in over the first 15%, out over the last 25%
+    let g = 0;
+    let gp = 0;
+    if (gestureName) {
+      gestureT += dt;
+      gp = gestureT / gestureLen;
+      if (gp >= 1) gestureName = null;
+      else g = Math.min(1, gp / 0.15, (1 - gp) / 0.25);
+    }
+    const is = (name) => (gestureName === name ? g : 0);
+
     // Lean in from the hips: the body tips forward around the hip point, and the legs
-    // counter-rotate so the feet stay on the floor.
-    const lean = 0.08 + reachNow * 0.47 * leanIn;
+    // counter-rotate so the feet stay on the floor. Surprise and laughter rock back a little.
+    const lean = 0.08 + reachNow * 0.47 * leanIn - 0.2 * is('surprise') - 0.1 * is('laugh');
+    const bob = Math.abs(Math.sin(time * 15)) * 0.012 * is('laugh');
     body.rotation.x = lean;
-    body.position.set(0, -SEAT_DROP + hipY * (1 - Math.cos(lean)) + Math.sin(time * 1.6) * 0.003, -hipY * Math.sin(lean));
+    body.position.set(0, -SEAT_DROP + hipY * (1 - Math.cos(lean)) + Math.sin(time * 1.6) * 0.003 + bob, -hipY * Math.sin(lean));
     legs.forEach(({ hip, knee }, i) => {
       hip.rotation.x = -Math.PI / 2 - lean;
       hip.rotation.z = (i ? 1 : -1) * 0.08;
       knee.rotation.x = Math.PI / 2 - 0.05;
     });
-    head.rotation.x = 0.15 + reachNow * 0.05; // looking down at the board
+
+    // head: follow the look target, plus nods, shakes and laughing
+    const want = look ?? { yaw: 0, pitch: 0.15 + reachNow * 0.05 };
+    const lk = Math.min(1, dt * 5);
+    lookNow.yaw += (THREE.MathUtils.clamp(want.yaw, -0.9, 0.9) - lookNow.yaw) * lk;
+    lookNow.pitch += (THREE.MathUtils.clamp(want.pitch, -0.35, 0.75) - lookNow.pitch) * lk;
+    head.rotation.order = 'YXZ';
+    head.rotation.y = lookNow.yaw + Math.sin(gp * Math.PI * 5) * 0.32 * is('shake');
+    head.rotation.x = lookNow.pitch + Math.sin(gp * Math.PI * 4) * 0.2 * is('nod') - 0.35 * is('laugh') - 0.15 * is('surprise') + 0.12 * is('chin');
+    head.rotation.z = 0.08 * is('chin');
+    for (const b of brows) b.position.y = R * 0.38 + R * 0.12 * is('surprise');
+
+    // blinking (and a squint while laughing)
+    blinkIn -= dt;
+    if (blinkIn <= 0 && blinkT < 0) { blinkT = 0; blinkIn = 2 + Math.random() * 4; }
+    let close = 0;
+    if (blinkT >= 0) {
+      blinkT += dt;
+      close = Math.max(0, 1 - Math.abs(blinkT / 0.07 - 1));
+      if (blinkT > 0.14) blinkT = -1;
+    }
+    close = Math.max(close, 0.6 * is('laugh'));
+    for (const lid of lids) lid.rotation.x = 0.35 + 1.15 * close;
 
     // Arm angles are set in the world (forward of straight down). A forward lean swings a
     // hanging arm backwards, so the lean is subtracted.
     const wave = Math.sin(time * 9) * 0.25 * cheerNow;
+    const clap = is('clap');
+    const clapOpen = 0.5 + 0.5 * Math.sin(time * 17);
     arms.forEach(({ shoulder, elbow, wrist }, i) => {
+      const side = i ? 1 : -1;
       const reaching = i === REACH ? reachNow : 0;
       // resting: upper arm forward, forearm angled down so the hand lies on the thigh
-      const upper = 0.5 + (0.78 - 0.5) * reaching;
-      const bend = 0.62 + (0.2 - 0.62) * reaching;
+      let upper = 0.3 + (0.78 - 0.3) * reaching;
+      let bend = 0.6 + (0.2 - 0.6) * reaching;
+      const restZ = -side * 0.07; // elbows tucked so the hands sit on the thighs
+      let z = i === REACH ? swingNow * reaching + restZ * (1 - reaching) : restZ;
+      let wristY = Math.PI;
+      let wristX = 0.25 * reaching - 0.12 * (1 - reaching);
+      let curl = i === REACH ? gripNow : 0.35;
+
+      // thinking: the left hand comes up to stroke the chin
+      const chin = i === 1 ? is('chin') : 0;
+      if (chin) {
+        upper += (1.25 - upper) * chin;
+        bend += (2.3 - bend) * chin;
+        z += (-0.42 + Math.sin(time * 5) * 0.03 - z) * chin;
+        wristX += (-0.5 - wristX) * chin;
+        curl += (0.7 - curl) * chin;
+      }
+      // clapping: both hands in front of the chest, palms facing
+      if (clap) {
+        upper += (0.95 - upper) * clap;
+        bend += (1.15 - bend) * clap;
+        z += (-side * (0.5 - 0.14 * clapOpen) - z) * clap;
+        wristY += (-side * Math.PI / 2 - wristY) * clap;
+        curl += (0.1 - curl) * clap;
+      }
+      // surprise: hands lift off the knees, palms open
+      const sur = is('surprise');
+      if (sur) {
+        upper += (0.85 - upper) * sur;
+        bend += (1.5 - bend) * sur;
+        z += (side * 0.25 - z) * sur;
+        curl += (0 - curl) * sur;
+      }
+
       shoulder.rotation.x = -(upper + lean) * (1 - cheerNow) - 2.9 * cheerNow;
       elbow.rotation.x = -bend * (1 - cheerNow) - 0.35 * cheerNow;
       // With the forearm forward the hand's palm side (+z) would face up, so the wrist turns
       // it over (pronates): palms down on the thighs and over the board, thumbs inward.
-      wrist.rotation.y = Math.PI * (1 - cheerNow);
-      wrist.rotation.x = 0.25 * reaching - 0.12 * (1 - reaching);
-      const side = i ? 1 : -1;
-      const restZ = -side * 0.07; // elbows tucked so the hands sit on the thighs
-      shoulder.rotation.z = (i === REACH ? swingNow * reaching + restZ * (1 - reaching) : restZ) * (1 - cheerNow)
-        + side * 0.35 * cheerNow + wave * side;
-      curlHand(hands[i], i === REACH ? gripNow : 0.35 + cheerNow * 0.5);
+      wrist.rotation.y = wristY * (1 - cheerNow);
+      wrist.rotation.x = wristX;
+      shoulder.rotation.z = z * (1 - cheerNow) + side * 0.35 * cheerNow + wave * side;
+      curlHand(hands[i], curl + cheerNow * 0.5 * (i === REACH ? 0 : 1));
     });
   }
 
@@ -423,5 +508,5 @@ export function buildCharacter(rawStyle) {
   }
 
   animate(0);
-  return { root, body, head, headY, headR: R, palm: hands[REACH].palmPoint, animate, dispose, style };
+  return { root, body, head, headY, headR: R, palm: hands[REACH].palmPoint, animate, gesture, dispose, style };
 }

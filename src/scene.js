@@ -274,6 +274,117 @@ export async function buildScene(renderer) {
   glow.visible = false;
   scene.add(glow);
 
+  // ── Hurricane lantern hanging over the table (lit at night) ──
+  const metal = new THREE.MeshStandardMaterial({ color: '#3a3f44', roughness: 0.4, metalness: 0.8 });
+  const lantern = new THREE.Group();
+  lantern.position.set(0.32, 1.72, -0.05);
+  scene.add(lantern);
+  const wire = new THREE.Mesh(new THREE.CylinderGeometry(0.003, 0.003, 3.1 - 1.86, 6), metal);
+  wire.position.y = (3.1 - 1.72) / 2 + 0.07;
+  lantern.add(wire);
+  const flameGlass = new THREE.MeshStandardMaterial({ color: '#fff2d8', emissive: '#ffb35c', emissiveIntensity: 0, transparent: true, opacity: 0.75, roughness: 0.1 });
+  const globe = new THREE.Mesh(new THREE.SphereGeometry(0.06, 20, 16), flameGlass);
+  globe.scale.y = 1.25;
+  lantern.add(globe);
+  for (const y of [0.085, -0.085]) {
+    const capMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.055, 0.03, 16), metal);
+    capMesh.position.y = y;
+    lantern.add(capMesh);
+  }
+  const lanternLight = new THREE.PointLight('#ffb35c', 0, 5, 1.6);
+  lanternLight.position.copy(lantern.position);
+  scene.add(lanternLight);
+  const lanternSpot = new THREE.SpotLight('#ffbf70', 0, 4, 0.9, 0.6, 1.4);
+  lanternSpot.position.copy(lantern.position).add(new THREE.Vector3(0, -0.1, 0));
+  lanternSpot.target.position.set(0, TABLE_TOP, 0);
+  lanternSpot.castShadow = true;
+  lanternSpot.shadow.mapSize.set(1024, 1024);
+  lanternSpot.shadow.bias = -0.0005;
+  scene.add(lanternSpot, lanternSpot.target);
+
+  // Time of day follows the player's own clock: afternoon, golden evening, or night by lantern.
+  function setTimeOfDay(kind) {
+    const night = kind === 'night';
+    const evening = kind === 'evening';
+    sun.color.set(night ? '#8fa6ff' : evening ? '#ffad66' : '#ffe2b8');
+    sun.intensity = night ? 0.25 : evening ? 2.3 : 2.6;
+    sun.position.set(evening ? 5.2 : 4.5, evening ? 2.1 : night ? 5 : 4.2, evening ? 3.4 : 2.5);
+    scene.environmentIntensity = night ? 0.1 : evening ? 0.55 : 1.0;
+    scene.backgroundIntensity = night ? 0.06 : evening ? 0.45 : 0.85;
+    lanternLight.intensity = night ? 2.2 : 0;
+    lanternSpot.intensity = night ? 7 : 0;
+    flameGlass.emissiveIntensity = night ? 2.5 : 0;
+  }
+  setTimeOfDay('day');
+
+  // ── Chickens wandering the open end of the verandah ──
+  function chicken(color) {
+    const c = new THREE.Group();
+    const feathers = new THREE.MeshStandardMaterial({ color, roughness: 0.9 });
+    const red = new THREE.MeshStandardMaterial({ color: '#c8231c', roughness: 0.6 });
+    const beakMat = new THREE.MeshStandardMaterial({ color: '#e0a332', roughness: 0.5 });
+    const bodyMesh = new THREE.Mesh(new THREE.SphereGeometry(0.11, 18, 14), feathers);
+    bodyMesh.scale.set(0.85, 0.8, 1.15);
+    bodyMesh.position.y = 0.2;
+    const tail = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.14, 10), feathers);
+    tail.position.set(0, 0.27, -0.12);
+    tail.rotation.x = -0.7;
+    const head = new THREE.Group();
+    head.position.set(0, 0.3, 0.1);
+    const skull = new THREE.Mesh(new THREE.SphereGeometry(0.045, 14, 12), feathers);
+    const comb = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.035, 0.05), red);
+    comb.position.set(0, 0.045, 0.005);
+    const wattle = new THREE.Mesh(new THREE.SphereGeometry(0.014, 8, 6), red);
+    wattle.position.set(0, -0.035, 0.035);
+    const beak = new THREE.Mesh(new THREE.ConeGeometry(0.012, 0.035, 8), beakMat);
+    beak.position.set(0, -0.005, 0.055);
+    beak.rotation.x = Math.PI / 2;
+    head.add(skull, comb, wattle, beak);
+    const legs = [-1, 1].map((s) => {
+      const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.12, 6), beakMat);
+      leg.geometry.translate(0, -0.06, 0);
+      leg.position.set(s * 0.035, 0.13, 0);
+      c.add(leg);
+      return leg;
+    });
+    c.add(bodyMesh, tail, head);
+    c.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+    c.userData = { head, legs, target: new THREE.Vector3(), wait: 0, peck: 0 };
+    scene.add(c);
+    return c;
+  }
+  const chickens = [chicken('#f2ede4'), chicken('#8a4b24')];
+  chickens[0].position.set(2.4, 0, 0.6);
+  chickens[1].position.set(3.2, 0, -1.0);
+
+  // ── A small radio on a stool by the wall (click it to switch the music on or off) ──
+  const radio = new THREE.Group();
+  radio.position.set(-2.75, 0, -1.55);
+  scene.add(radio);
+  const stoolTop = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.04, 20), woodLight);
+  stoolTop.position.y = 0.42;
+  radio.add(stoolTop);
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * Math.PI * 2;
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.02, 0.42, 8), woodLight);
+    leg.position.set(Math.cos(a) * 0.11, 0.21, Math.sin(a) * 0.11);
+    radio.add(leg);
+  }
+  const caseMat = new THREE.MeshStandardMaterial({ color: '#5a2e1c', roughness: 0.5 });
+  const box = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.17, 0.1), caseMat);
+  box.position.y = 0.525;
+  const grille = new THREE.Mesh(new THREE.CircleGeometry(0.055, 24), new THREE.MeshStandardMaterial({ color: '#1d1b19', roughness: 0.9 }));
+  grille.position.set(-0.06, 0.525, 0.051);
+  const dialMat = new THREE.MeshStandardMaterial({ color: '#e7d7a8', emissive: '#ffcf6e', emissiveIntensity: 0 });
+  const dial = new THREE.Mesh(new THREE.PlaneGeometry(0.09, 0.035), dialMat);
+  dial.position.set(0.075, 0.545, 0.051);
+  const antenna = new THREE.Mesh(new THREE.CylinderGeometry(0.003, 0.003, 0.32, 6), metal);
+  antenna.position.set(0.11, 0.75, -0.02);
+  antenna.rotation.z = -0.4;
+  radio.add(box, grille, dial, antenna);
+  radio.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  const setRadioLight = (on) => { dialMat.emissiveIntensity = on ? 1.2 : 0; };
+
   await Promise.all([sky, allLoaded]);
-  return { scene, seeds, hitTargets, glow, sun };
+  return { scene, seeds, hitTargets, glow, sun, setTimeOfDay, chickens, radio: box, setRadioLight };
 }

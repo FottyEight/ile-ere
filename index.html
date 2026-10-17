@@ -20,6 +20,7 @@
 </div>
 <div id="counts"></div>
 <div class="bubble" id="bubble" hidden></div>
+<div class="toast" id="toast" hidden></div>
 
 <!-- start.ng profile card: face, character name, @account -->
 <div class="card" id="card">
@@ -52,7 +53,7 @@
   <div class="panel">
     <p class="kicker">A start.ng game</p>
     <h1>Ayo <span>Olopon</span></h1>
-    <p class="lead">It's a quiet afternoon on the verandah. Baba has set out the board. Sit down and play Ayo, the Yoruba seed game, and see if you can beat him.</p>
+    <p class="lead"><span id="lead-time">It's a quiet afternoon on the verandah.</span> Baba has set out the board. Sit down and play Ayo, the Yoruba seed game, and see if you can beat him.</p>
     <p class="label">How strong is Baba?</p>
     <div class="levels" role="group" aria-label="Difficulty">
       <button type="button" data-level="0">Easy</button>
@@ -65,6 +66,11 @@
       <button type="button" data-speed="0">Normal</button>
       <button type="button" data-speed="1">Fast</button>
       <button type="button" data-speed="2">Very fast</button>
+    </div>
+    <div class="record" id="record" hidden>
+      <p class="label">Your record against Baba</p>
+      <ul id="record-rows"></ul>
+      <p class="note" id="record-best"></p>
     </div>
     <button class="big" id="play" type="button">Sit down and play</button>
     <p class="note" id="menu-signin-note">Playing as a guest. <button class="link" id="menu-signin" type="button">Sign in with start.ng</button> to play as your own character and save your win streak.</p>
@@ -79,6 +85,12 @@
       <div><small>Baba</small><b id="over-baba">0</b></div>
     </div>
     <p class="streak" id="over-streak"></p>
+    <p class="note" id="over-record"></p>
+    <blockquote class="proverb">
+      <p id="proverb-yo"></p>
+      <p class="meaning" id="proverb-en"></p>
+      <cite>Baba says</cite>
+    </blockquote>
     <p class="status" id="over-status"></p>
     <button class="secondary" id="over-signin" type="button" hidden>Sign in with start.ng</button>
     <h3>Leaderboard: longest win streaks</h3>

@@ -62,6 +62,19 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .skip { position: absolute; right: 16px; bottom: 18px; pointer-events: auto; border: 1px solid var(--edge); border-radius: 999px;
   padding: 7px 14px; background: var(--panel); font-weight: 700; font-size: 13px; }
 .spaced { margin-top: 14px; }
+.record { margin-top: 14px; padding: 10px 12px; border-radius: 12px; background: rgba(255,255,255,.05); border: 1px solid var(--edge); }
+.record .label { margin-bottom: 6px; }
+.record ul { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.record li { display: flex; justify-content: space-between; gap: 6px; font-size: 13px; color: var(--dim); }
+.record li b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.record .note { margin-top: 6px; }
+.proverb { margin: 14px 0 4px; padding: 10px 14px; border-left: 3px solid var(--gold); background: rgba(255, 215, 106, .07); border-radius: 0 10px 10px 0; }
+.proverb p { margin: 0; font-weight: 700; line-height: 1.4; }
+.proverb .meaning { margin-top: 4px; font-weight: 400; font-size: 13px; color: var(--dim); }
+.proverb cite { display: block; margin-top: 4px; font-size: 11px; font-style: normal; letter-spacing: .08em; text-transform: uppercase; color: var(--gold); }
+.toast { position: fixed; top: 92px; left: 50%; transform: translateX(-50%); z-index: 7; max-width: min(420px, 90vw); padding: 8px 14px; border-radius: 12px;
+  background: var(--panel); border: 1px solid var(--edge); font-size: 14px; text-align: center; pointer-events: none; animation: toast-in .3s ease-out; }
+@keyframes toast-in { from { opacity: 0; transform: translate(-50%, -6px); } }
 .levels.small button { padding: 7px; font-size: 13px; }
 .wide { width: 100%; margin-top: 12px; }
 
