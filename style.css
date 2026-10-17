@@ -62,6 +62,19 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .skip { position: absolute; right: 16px; bottom: 18px; pointer-events: auto; border: 1px solid var(--edge); border-radius: 999px;
   padding: 7px 14px; background: var(--panel); font-weight: 700; font-size: 13px; }
 .spaced { margin-top: 14px; }
+/* walking about the joint */
+.walk-hud { position: fixed; inset: 0; z-index: 4; pointer-events: none; }
+.walk-hud .hint { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); margin: 0; font-size: 13px; color: var(--dim);
+  text-shadow: 0 1px 3px rgba(0,0,0,.8); white-space: nowrap; }
+.sit { position: absolute; left: 50%; bottom: 52px; transform: translateX(-50%); pointer-events: auto; border: 0; border-radius: 999px;
+  padding: 12px 22px; background: var(--accent); color: #1f2a12; font-size: 16px; font-weight: 800; box-shadow: 0 8px 24px rgba(0,0,0,.35);
+  animation: toast-in .25s ease-out; white-space: nowrap; }
+.sit:disabled { background: var(--panel); color: var(--ink); border: 1px solid var(--edge); cursor: default; font-weight: 700; }
+body.cover .walk-hud, body.cover .toast { display: none !important; }
+@media (max-width: 640px) {
+  .walk-hud .hint { white-space: normal; width: 92vw; text-align: center; }
+  .sit { font-size: 14px; max-width: 92vw; white-space: normal; text-align: center; }
+}
 .record { margin-top: 14px; padding: 10px 12px; border-radius: 12px; background: rgba(255,255,255,.05); border: 1px solid var(--edge); }
 .record .label { margin-bottom: 6px; }
 .record ul { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }

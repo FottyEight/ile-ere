@@ -1,6 +1,14 @@
-# Ayo Olopon
+# Baba's Joint
 
-Sit down on a Lagos verandah with Baba for a game of **Ayo**, the Yoruba seed game. A three.js game for [start.ng](https://start.ng).
+A Lagos game house you walk into as your own start.ng character. Tables line the verandah and the courtyard: **Ayo** with Baba, **Draughts** with Tunde the barber, **Whot** with Iya Bisi and friends, **Ludo** with Kemi and Tobi, **Snooker** with Emeka and **Table football** with Chidi. Walk up to a table and sit down to play. A three.js game for [start.ng](https://start.ng).
+
+**Open now:** Ayo. The other tables are set up with their regulars and open one by one.
+
+Walking: WASD or arrow keys (Shift to hurry), drag to look around, or tap the floor or a table to walk there. Next to a table, press E or tap the button to sit down.
+
+## Ayo Olopon
+
+Sit down with Baba for a game of **Ayo**, the Yoruba seed game.
 
 ![Ayo Olopon](cover.png)
 

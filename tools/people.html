@@ -46,8 +46,10 @@ const people = looks.map((look, i) => {
   scene.add(c.root);
   return c;
 });
-const pose = { reach: q.get('pose') === 'reach' ? 1 : 0, cheer: q.get('pose') === 'cheer' ? 1 : 0, reachToX: 0.0, grip: q.get('pose') === 'reach' ? 0.8 : 0 };
-for (let i = 0; i < 60; i++) people.forEach((c) => c.animate(1 / 30, { ...pose, time: i / 30 }));
+const p = q.get('pose');
+const pose = { reach: p === 'reach' ? 1 : 0, cheer: p === 'cheer' ? 1 : 0, reachToX: 0.0, grip: p === 'reach' ? 0.8 : 0,
+  seated: p !== 'stand' && p !== 'walk', walk: p === 'walk' ? 1.4 : 0 };
+for (let i = 0; i < 70; i++) people.forEach((c, n) => c.animate(1 / 30 + (p === 'walk' ? n * 0.004 : 0), { ...pose, time: i / 30 }));
 
 const camera = new THREE.PerspectiveCamera(30, innerWidth / innerHeight, 0.02, 50);
 if (q.get('view') === 'close') {

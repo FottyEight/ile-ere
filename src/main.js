@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { buildScene, onLoadProgress, pitCenter, storeCenter, seedSlot, storeSlot, BOARD_TOP, SEAT_Z } from './scene.js';
 import { buildCharacter, styleKey } from './character.js';
+import { SPAWN, VERANDAH, YARD } from './house.js';
 import { newGame, play, legalMoves, chooseMove } from './ayo.js';
 import { whoami, saveRun, leaderboard, signIn, onStartNg, cameAsGuest, FALLBACK_GUEST } from './startng.js';
 import { unlock, sfx, toggleMute, isMuted, setAmbience, toggleRadio, radioPlaying, okada, cluck } from './sound.js';
@@ -28,8 +29,8 @@ const camera = new THREE.PerspectiveCamera(36, innerWidth / innerHeight, 0.05, 1
 onLoadProgress((f) => {
   $('loading-bar').style.width = `${Math.round(f * 100)}%`;
 });
-const { scene, seeds, hitTargets, glow, setTimeOfDay, chickens, radio, setRadioLight } = await buildScene(renderer);
-$('loading').hidden = true;
+const { scene, seeds, hitTargets, glow, followSun, setTimeOfDay, chickens, radio, setRadioLight, house } = await buildScene(renderer);
+$('loading-text').textContent = 'Lighting the lanterns…';
 
 // The time of day follows the player's clock (?time=day|evening|night to try one).
 const hour = new Date().getHours();
@@ -39,9 +40,9 @@ const timeOfDay = ['day', 'evening', 'night'].includes(params.get('time'))
 setTimeOfDay(timeOfDay);
 setAmbience(timeOfDay);
 $('lead-time').textContent = {
-  day: 'It’s a quiet afternoon on the verandah.',
-  evening: 'The sun is going down over the verandah.',
-  night: 'NEPA has taken light, so the lantern is lit on the verandah.',
+  day: 'It’s a quiet afternoon at the joint.',
+  evening: 'The sun is going down over the joint.',
+  night: 'NEPA has taken light, so the lanterns are lit.',
 }[timeOfDay];
 if (timeOfDay === 'night') chickens.forEach((c) => { c.visible = false; }); // gone to roost
 setRadioLight(radioPlaying());
@@ -72,13 +73,28 @@ baba.root.position.set(0, 0, -SEAT_Z);
 scene.add(baba.root);
 
 const playerNode = new THREE.Group();
-playerNode.position.set(0, 0, SEAT_Z);
-playerNode.rotation.y = Math.PI;
+playerNode.position.copy(SPAWN);
+playerNode.rotation.y = Math.PI; // facing into the joint
 scene.add(playerNode);
 let me = null;
 let meKey = '';
 const shadowAll = (o) => o.traverse((c) => { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; } });
 shadowAll(baba.root);
+
+// ── The regulars at the other tables ──
+const regulars = house.regulars.map((r) => {
+  const c = buildCharacter(r.style);
+  shadowAll(c.root);
+  c.root.position.copy(r.pos);
+  c.root.rotation.y = r.face;
+  if (r.child) {
+    // children: smaller, and raised so they still sit on the stool
+    c.root.scale.setScalar(0.78);
+    if (!r.standing) c.root.position.y = 0.46 * (1 - 0.78);
+  }
+  scene.add(c.root);
+  return { ...r, c, gestureIn: 4 + Math.random() * 8 };
+});
 
 // ── Who's playing (start.ng) ──
 let identity = { user: null, guest: FALLBACK_GUEST, connected: false };
@@ -115,10 +131,20 @@ function applyIdentity(who) {
   $('label-you').textContent = who.user ? look.name : 'You';
 }
 let refreshing = false;
+// (the character is only swapped once the scene is ready: rebuilding it while the shaders are
+// still compiling breaks the compile)
+let markReady;
+const sceneReady = new Promise((r) => { markReady = r; });
 async function refreshIdentity() {
   if (refreshing) return;
   refreshing = true;
-  try { applyIdentity(await whoami()); } finally { refreshing = false; }
+  try {
+    const who = await whoami();
+    await sceneReady;
+    applyIdentity(who);
+  } finally {
+    refreshing = false;
+  }
 }
 applyIdentity(identity);
 refreshIdentity();
@@ -178,7 +204,7 @@ function followHand(dt) {
 
 // ── Game state ──
 let game = newGame();
-let mode = 'menu';
+let mode = 'walk';
 let busy = false;
 let level = 1;
 try { level = Math.min(2, Math.max(0, Number(localStorage.getItem('ayo-level') ?? 1))); } catch { /* storage blocked */ }
@@ -191,7 +217,8 @@ function setMode(next) {
   document.body.dataset.mode = next;
   $('menu').hidden = next !== 'menu';
   $('over').hidden = next !== 'over';
-  $('hud').hidden = next === 'menu';
+  $('hud').hidden = next === 'menu' || next === 'walk';
+  $('walk-hud').hidden = next !== 'walk';
 }
 
 function renderLevels() {
@@ -573,8 +600,9 @@ $('rules-close').onclick = () => { $('rules').hidden = true; };
 $('mute').textContent = isMuted() ? '\u{1F507}' : '\u{1F50A}';
 $('mute').onclick = () => { unlock(); $('mute').textContent = toggleMute() ? '\u{1F507}' : '\u{1F50A}'; };
 setUpSeeds();
-setMode('menu');
+setMode('walk');
 updateScores();
+setTimeout(() => toast('Welcome to Baba’s Joint! Walk up to a table to play.', 5000), 600);
 
 // ── Seed counts over each pit ──
 const counts = [];
@@ -596,14 +624,15 @@ function placeCounts() {
     tmp.project(camera);
     const el = counts[i];
     el.style.transform = `translate(${(tmp.x * 0.5 + 0.5) * innerWidth}px, ${(-tmp.y * 0.5 + 0.5) * innerHeight}px) translate(-50%, -50%)`;
-    el.hidden = tmp.z > 1 || mode === 'menu';
+    el.hidden = tmp.z > 1 || mode === 'menu' || mode === 'walk';
     if (i < 12) el.textContent = String(pitSeeds[i].length);
     else el.textContent = String(storeSeeds[i - 12].length);
   }
   // speech bubble over the speaker
   const b = $('bubble');
   if (!b.hidden) {
-    const speaker = b.dataset.who === 'you' ? me : baba;
+    const who = b.dataset.who;
+    const speaker = who === 'you' ? me : who === 'baba' ? baba : regulars.find((r) => r.name === who)?.c ?? baba;
     const head = speaker.head.getWorldPosition(new THREE.Vector3());
     head.y += 0.22;
     head.project(camera);
@@ -688,8 +717,14 @@ renderer.domElement.addEventListener('pointermove', (e) => {
     const dy = e.clientY - drag.y;
     drag.moved += Math.abs(dx) + Math.abs(dy);
     if (drag.moved > 6) {
-      yaw = THREE.MathUtils.clamp(yaw - dx * 0.005, -1.3, 1.5);
-      pitch = THREE.MathUtils.clamp(pitch + dy * 0.004, 0.25, 1.25);
+      if (mode === 'walk') {
+        walkCam.yaw -= dx * 0.006;
+        walkCam.pitch = THREE.MathUtils.clamp(walkCam.pitch + dy * 0.004, 0.05, 0.9);
+        walkCam.dragged = 2.5; // stop the camera swinging back behind you for a moment
+      } else {
+        yaw = THREE.MathUtils.clamp(yaw - dx * 0.005, -1.3, 1.5);
+        pitch = THREE.MathUtils.clamp(pitch + dy * 0.004, 0.25, 1.25);
+      }
     }
     drag.x = e.clientX;
     drag.y = e.clientY;
@@ -702,6 +737,21 @@ renderer.domElement.addEventListener('pointermove', (e) => {
 // preview, a second tap on the same pit plays it.
 let selected = -1;
 renderer.domElement.addEventListener('pointerup', (e) => {
+  if (drag && drag.id === e.pointerId && drag.moved <= 6 && mode === 'walk') {
+    // tap or click to walk there; on a table, walk up to it
+    pointer.set((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
+    raycaster.setFromCamera(pointer, camera);
+    if (raycaster.intersectObject(radio).length) {
+      const on = toggleRadio();
+      setRadioLight(on);
+      toast(on ? 'Baba’s radio is on 🎶' : 'Radio off', 1600);
+    } else {
+      const hit = raycaster.ray.intersectPlane(floorPlane, new THREE.Vector3());
+      if (hit) walkTo(hit);
+    }
+    drag = null;
+    return;
+  }
   if (drag && drag.id === e.pointerId && drag.moved <= 6) {
     const pit = pitAt(e.clientX, e.clientY);
     if (pit < 0 && raycaster.intersectObject(radio).length) {
@@ -719,25 +769,264 @@ renderer.domElement.addEventListener('pointerup', (e) => {
   drag = null;
 });
 renderer.domElement.addEventListener('wheel', (e) => {
-  dist = THREE.MathUtils.clamp(dist + e.deltaY * 0.001, 0.9, 2.6);
+  if (mode === 'walk') walkCam.dist = THREE.MathUtils.clamp(walkCam.dist + e.deltaY * 0.002, 1.6, 5);
+  else dist = THREE.MathUtils.clamp(dist + e.deltaY * 0.001, 0.9, 2.6);
 }, { passive: true });
+const held = new Set();
 addEventListener('keydown', (e) => {
   unlock();
+  const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+  if (mode === 'walk') {
+    if (['w', 'a', 's', 'd', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Shift'].includes(k)) {
+      held.add(k);
+      walker.target = null;
+      if (k.startsWith('Arrow')) e.preventDefault();
+    } else if ((k === 'e' || k === 'Enter' || k === ' ') && nearStation) {
+      e.preventDefault();
+      useStation(nearStation);
+    } else if (k === 'm') $('mute').click();
+    return;
+  }
   if (e.key >= '1' && e.key <= '6') playerMove(Number(e.key) - 1);
-  else if (e.key === 'm' || e.key === 'M') $('mute').click();
+  else if (k === 'm') $('mute').click();
   else if (e.key === 'Enter' && mode === 'menu') startGame();
+  else if (e.key === 'Escape' && (mode === 'menu' || mode === 'over')) standUp();
 });
+addEventListener('keyup', (e) => held.delete(e.key.length === 1 ? e.key.toLowerCase() : e.key));
+addEventListener('blur', () => held.clear());
+
+// ── Walking around the joint ──
+const floorPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+const WALK_SPEED = 1.5;
+const RUN_SPEED = 3.0;
+const BODY_R = 0.27;
+const walker = {
+  pos: SPAWN.clone(),
+  heading: Math.PI, // facing into the joint (-z)
+  speed: 0,
+  target: null, // a point to walk to (from a tap or click)
+  goingTo: null, // a table to use on arrival
+  seat: null, // { from, to, t, face, onDone } while sitting down
+};
+const walkCam = { yaw: 0, pitch: 0.32, dist: 3.2, dragged: 0 };
+walkCam.yaw = walker.heading + Math.PI;
+for (const s of house.stations) {
+  // the middle of each table, for spotting clicks on it
+  s.centre = s.seat.clone().add(s.seat.clone().sub(s.approach).setLength(0.75));
+}
+const stationById = (id) => house.stations.find((s) => s.id === id);
+let nearStation = null;
+let greeted = new Set();
+
+function walkTo(point) {
+  // clicking on or near a table walks you up to it and sits you down
+  const table = house.stations.find((s) => Math.hypot(point.x - s.centre.x, point.z - s.centre.z) < 1.0);
+  if (table) {
+    walker.target = table.approach.clone();
+    walker.goingTo = table;
+  } else {
+    walker.target = point.clone().setY(0);
+    walker.goingTo = null;
+  }
+  tapMark(walker.target);
+}
+// a little ring where you tapped
+const tapRing = new THREE.Mesh(
+  new THREE.RingGeometry(0.12, 0.16, 32).rotateX(-Math.PI / 2),
+  new THREE.MeshBasicMaterial({ color: '#ffd76a', transparent: true, opacity: 0, depthWrite: false }),
+);
+scene.add(tapRing);
+function tapMark(p) {
+  tapRing.position.set(p.x, 0.01, p.z);
+  tapRing.material.opacity = 0.9;
+}
+
+// pushes a circle at (x, z) out of every collider; returns the corrected point
+function collide(p) {
+  for (const b of house.colliders) {
+    const cx = THREE.MathUtils.clamp(p.x, b.minX, b.maxX);
+    const cz = THREE.MathUtils.clamp(p.z, b.minZ, b.maxZ);
+    const dx = p.x - cx;
+    const dz = p.z - cz;
+    const d2 = dx * dx + dz * dz;
+    if (d2 >= BODY_R * BODY_R) continue;
+    if (d2 > 1e-8) {
+      const d = Math.sqrt(d2);
+      p.x = cx + (dx / d) * BODY_R;
+      p.z = cz + (dz / d) * BODY_R;
+    } else {
+      // centre inside the box: leave by the nearest side
+      const out = [[p.x - b.minX, -1, 0], [b.maxX - p.x, 1, 0], [p.z - b.minZ, 0, -1], [b.maxZ - p.z, 0, 1]].sort((a, c) => a[0] - c[0])[0];
+      p.x += out[1] * (out[0] + BODY_R);
+      p.z += out[2] * (out[0] + BODY_R);
+    }
+  }
+  return p;
+}
+
+function stepWalker(dt) {
+  // keyboard movement, relative to the camera
+  let ix = 0;
+  let iz = 0;
+  if (held.has('w') || held.has('ArrowUp')) iz += 1;
+  if (held.has('s') || held.has('ArrowDown')) iz -= 1;
+  if (held.has('d') || held.has('ArrowRight')) ix += 1;
+  if (held.has('a') || held.has('ArrowLeft')) ix -= 1;
+  let dir = null;
+  if (ix || iz) {
+    const fwd = new THREE.Vector2(-Math.sin(walkCam.yaw), -Math.cos(walkCam.yaw));
+    const right = new THREE.Vector2(-fwd.y, fwd.x);
+    dir = fwd.multiplyScalar(iz).add(right.multiplyScalar(ix)).normalize();
+    walker.goingTo = null;
+  } else if (walker.target) {
+    const to = new THREE.Vector2(walker.target.x - walker.pos.x, walker.target.z - walker.pos.z);
+    const d = to.length();
+    if (d < 0.08) {
+      walker.target = null;
+      if (walker.goingTo) {
+        const s = walker.goingTo;
+        walker.goingTo = null;
+        useStation(s);
+      }
+    } else {
+      dir = to.normalize();
+      if (d < 0.4) dir.multiplyScalar(Math.max(0.35, d / 0.4)); // slow down on arrival
+    }
+  }
+  const wantSpeed = dir ? (held.has('Shift') ? RUN_SPEED : WALK_SPEED) * Math.min(1, dir.length()) : 0;
+  walker.speed += (wantSpeed - walker.speed) * Math.min(1, dt * 8);
+  if (dir && dir.lengthSq() > 1e-6) {
+    const want = Math.atan2(dir.x, dir.y);
+    let turn = want - walker.heading;
+    turn = Math.atan2(Math.sin(turn), Math.cos(turn));
+    walker.heading += turn * Math.min(1, dt * 10);
+    const before = walker.pos.clone();
+    const n = dir.clone().normalize();
+    walker.pos.x += n.x * walker.speed * dt;
+    walker.pos.z += n.y * walker.speed * dt;
+    collide(walker.pos);
+    // stuck against something on the way to a tapped point: give up
+    if (walker.target && walker.pos.distanceTo(before) < walker.speed * dt * 0.2) {
+      walker.stuck = (walker.stuck ?? 0) + dt;
+      if (walker.stuck > 0.6) { walker.target = null; walker.goingTo = null; walker.stuck = 0; }
+    } else {
+      walker.stuck = 0;
+    }
+  }
+  tapRing.material.opacity = Math.max(0, tapRing.material.opacity - dt * (walker.target ? 0.4 : 3));
+
+  // the camera swings round behind you as you walk, unless you've just turned it yourself
+  walkCam.dragged -= dt;
+  if (walker.speed > 0.3 && walkCam.dragged <= 0) {
+    let d = walker.heading + Math.PI - walkCam.yaw;
+    d = Math.atan2(Math.sin(d), Math.cos(d));
+    walkCam.yaw += d * Math.min(1, dt * 1.6);
+  }
+
+  // near a table? offer to sit down
+  let near = null;
+  for (const s of house.stations) {
+    if (Math.hypot(walker.pos.x - s.approach.x, walker.pos.z - s.approach.z) < 0.9) near = s;
+  }
+  if (near !== nearStation) {
+    nearStation = near;
+    showPrompt(near);
+    if (near && !near.ready && !greeted.has(near.id)) {
+      greeted.add(near.id);
+      const host = regulars.find((r) => r.station === near.id);
+      if (host) {
+        host.c.gesture('nod', 1.2);
+        say(pickLine(OPENING_SOON[near.id] ?? ['Come back soon, this table is opening.']), host.name, 4200);
+      }
+    }
+  }
+}
+
+const OPENING_SOON = {
+  draughts: ['Ah, you play draughts? Come back soon, I’m setting up the board.', 'Draughts? This table opens soon. I go beat you!'],
+  whot: ['Whot is opening soon. We go show you “Pick two”!', 'Sit down soon, we’re still shuffling the cards.'],
+  ludo: ['Uncle is still teaching us the rules. Ludo opens soon!', 'Ludo soon! I’m blue, you can be red.'],
+  snooker: ['The table is being levelled. Snooker opens soon.', 'Snooker soon, my brother. Practise your cue.'],
+  foosball: ['Table football is coming soon. Get ready!', 'Soon! Na me be Messi for this table.'],
+};
+
+function showPrompt(s) {
+  const p = $('sit-prompt');
+  if (!s) { p.hidden = true; return; }
+  p.hidden = false;
+  p.disabled = !s.ready;
+  p.textContent = s.ready
+    ? `Sit down: ${s.name} with ${s.host} (E)`
+    : `${s.name} with ${s.host}: opening soon`;
+}
+$('sit-prompt').onclick = () => { if (nearStation) useStation(nearStation); };
+
+function useStation(s) {
+  if (!s.ready) {
+    showPrompt(s);
+    return;
+  }
+  if (s.id === 'ayo') sitAtAyo();
+}
+
+// walk the last steps onto the stool, turn round and sit; then the Ayo menu opens
+function sitAtAyo() {
+  const s = stationById('ayo');
+  held.clear();
+  walker.target = null;
+  nearStation = null;
+  $('sit-prompt').hidden = true;
+  $('walk-hud').hidden = true;
+  walker.seat = { from: walker.pos.clone(), fromHeading: walker.heading, to: s.seat.clone(), face: s.face, t: 0 };
+}
+function stepSitting(dt) {
+  const st = walker.seat;
+  st.t = Math.min(1, st.t + dt / 0.9);
+  const e = st.t * st.t * (3 - 2 * st.t);
+  walker.pos.lerpVectors(st.from, st.to, Math.min(1, e * 1.4));
+  let turn = st.face - st.fromHeading;
+  turn = Math.atan2(Math.sin(turn), Math.cos(turn));
+  walker.heading = st.fromHeading + turn * e;
+  walker.speed = st.t < 0.5 ? 0.6 : 0;
+  if (st.t >= 1) {
+    walker.seat = null;
+    walker.seated = true;
+    pose.me.cheer = 0;
+    setMode('menu');
+    renderLevels();
+    renderRecord();
+    say(pickLine(['Ah, you’ve come! Sit down, let’s play.', 'Welcome, omo mi. Ayo?', 'You’re back! Ready to lose? Haha!']), 'baba', 3200);
+  }
+}
+function standUp() {
+  if (busy) return;
+  const s = stationById('ayo');
+  walker.seated = false;
+  walker.pos.copy(s.approach);
+  walker.heading = 0; // facing out to the courtyard
+  walkCam.yaw = Math.PI;
+  pose.me.cheer = 0;
+  pose.baba.cheer = 0;
+  setMode('walk');
+  say(pickLine(['Come back anytime!', 'Ó dàbọ̀! Don’t go far.', 'Go well, omo mi.']), 'baba', 2400);
+}
+$('stand-up').onclick = standUp;
+$('over-leave').onclick = standUp;
 
 // ── Life on the verandah ──
 // Where people look: the pit being sown, the pit you're considering, each other when talking,
 // and now and then Baba glances up at you while you think.
 const tmpV = new THREE.Vector3();
-function lookToward(person, flipped, target) {
-  const h = person.head.getWorldPosition(tmpV);
-  let dx = target.x - h.x;
+// (rotY is how far the person is turned; the direction is worked out in their own frame)
+function lookToward(person, rotY, target) {
+  const h = person.head.getWorldPosition(new THREE.Vector3());
+  const wx = target.x - h.x;
   const dy = target.y - h.y;
-  let dz = target.z - h.z;
-  if (flipped) { dx = -dx; dz = -dz; } // you sit turned round
+  const wz = target.z - h.z;
+  const c = Math.cos(rotY);
+  const s = Math.sin(rotY);
+  const dx = wx * c - wz * s;
+  const dz = wx * s + wz * c;
   return { yaw: Math.atan2(dx, dz), pitch: Math.atan2(-dy, Math.hypot(dx, dz)) - person.body.rotation.x };
 }
 const sowing = { mover: -1, pit: -1 };
@@ -751,7 +1040,9 @@ function looks(dt) {
   const pitPoint = (i) => pitCenter(i);
   // Baba
   let bt = boardCentre;
+  const youClose = mode === 'walk' && Math.hypot(walker.pos.x, walker.pos.z) < 4;
   if (babaLooksAway && time < babaLooksAway.until) bt = babaLooksAway.target;
+  else if (youClose && me) bt = headOf(me); // Baba watches you come over
   else if (sowing.pit >= 0) bt = pitPoint(sowing.pit);
   else if (mode === 'over' || mode === 'menu' || babaTalking) bt = me ? headOf(me) : boardCentre;
   else if (mode === 'playing' && game.turn === 0) {
@@ -769,11 +1060,23 @@ function looks(dt) {
     const considering = [hovered, selected, lesson.pit].find((p) => p >= 0);
     if (considering !== undefined) mt = pitPoint(considering);
   }
-  return { baba: lookToward(baba, false, bt), me: me ? lookToward(me, true, mt) : null };
+  // walking about you look ahead, or at whoever is talking to you
+  let meLook = null;
+  if (me && mode === 'walk' && !$('bubble').hidden) {
+    const who = $('bubble').dataset.who;
+    const speaker = who === 'baba' ? baba : regulars.find((r) => r.name === who)?.c;
+    if (speaker) {
+      const l = lookToward(me, playerNode.rotation.y, headOf(speaker));
+      if (Math.abs(l.yaw) < 1.4) meLook = l;
+    }
+  } else if (me && mode !== 'walk') {
+    meLook = lookToward(me, playerNode.rotation.y, mt);
+  }
+  return { baba: lookToward(baba, 0, bt), me: meLook };
 }
 
 // Chickens potter about the open end of the verandah, stopping to peck.
-const coop = { minX: 1.6, maxX: 3.9, minZ: -1.7, maxZ: 1.9 };
+const coop = { minX: -3.1, maxX: 1.8, minZ: 3.2, maxZ: 9.8 }; // the courtyard's quiet corner
 function newSpot(c) {
   c.userData.target.set(
     THREE.MathUtils.randFloat(coop.minX, coop.maxX), 0,
@@ -836,7 +1139,7 @@ function stepStreet(dt) {
     neighbourIn = 60 + Math.random() * 60;
     const [line, reply] = GREETING[timeOfDay];
     toast(line);
-    babaLooksAway = { target: new THREE.Vector3(5, 1.5, 0.6), until: time + 2.2 };
+    babaLooksAway = { target: new THREE.Vector3(5.3, 1.5, 10.5), until: time + 2.2 }; // towards the gate
     setTimeout(() => { baba.gesture('nod', 1.2); say(reply, 'baba', 2400); }, 1100);
   }
 }
@@ -848,6 +1151,31 @@ const babaTarget = new THREE.Vector3(0, 0.7, -0.3);
 const target = new THREE.Vector3().copy(boardTarget);
 const menuTarget = new THREE.Vector3(0, 0.75, 0);
 let babaFocus = 0;
+const camPos = new THREE.Vector3();
+const camLook = new THREE.Vector3();
+const wantPos = new THREE.Vector3();
+const wantLook = new THREE.Vector3();
+const tmpCam = new THREE.Vector3();
+const tmpDir = new THREE.Vector3();
+let camReady = false;
+let camEase = 0;
+let lastCamGroup = 'walk';
+
+// The regulars look at you when you come near, otherwise at their game, and now and then
+// nod, laugh or scratch their chin over a move.
+function stepRegulars(dt) {
+  const youNear = (r) => mode === 'walk' && Math.hypot(walker.pos.x - r.pos.x, walker.pos.z - r.pos.z) < 3.2;
+  for (const r of regulars) {
+    const table = stationById(r.station);
+    const target = youNear(r) && me ? headOf(me) : tmpV.copy(table.centre).setY(0.7);
+    r.gestureIn -= dt;
+    if (r.gestureIn <= 0) {
+      r.c.gesture(pickLine(r.standing ? ['nod', 'chin', 'laugh'] : ['nod', 'chin', 'laugh', 'chin']), 1.4 + Math.random());
+      r.gestureIn = 5 + Math.random() * 10;
+    }
+    r.c.animate(dt, { time: time + r.pos.x, seated: !r.standing, look: lookToward(r.c, r.c.root.rotation.y, target) });
+  }
+}
 const clock = new THREE.Clock();
 let time = 0;
 function frame() {
@@ -856,26 +1184,82 @@ function frame() {
   stepTweens(dt);
   followHand(dt);
   // the menu slowly circles from your back to your face, framing both players
-  const menu = mode === 'menu' && !cover;
+  // you: walking about, sitting down, or seated at the Ayo table
+  if (mode === 'walk') {
+    if (walker.seat) stepSitting(dt);
+    else stepWalker(dt);
+    playerNode.position.copy(walker.pos);
+    playerNode.rotation.y = walker.heading;
+  } else {
+    playerNode.position.set(0, 0, SEAT_Z);
+    playerNode.rotation.y = Math.PI;
+  }
+
   const tall = Math.max(0, 1 / camera.aspect - 1);
-  // on tall screens the camera stands further back, so keep its orbit clear of the house walls
-  if (menu) yaw = tall > 0 ? 1.0 + Math.sin(time * 0.15) * 0.75 : 1.25 + Math.sin(time * 0.15) * 1.05;
-  const wantFocus = mode === 'over' || (mode === 'playing' && game.turn === 1) ? 1 : 0;
-  babaFocus += (wantFocus - babaFocus) * Math.min(1, dt * 2.2);
-  target.lerpVectors(boardTarget, babaTarget, babaFocus);
-  const look = menu ? menuTarget : target;
-  // tall phone screens see less from side to side, so step back
-  const d = (menu ? 3.1 * (1 + tall * 0.33) : (dist + 0.25 * babaFocus) * (1 + tall * 0.16));
-  const p = menu ? 0.3 : pitch - 0.32 * babaFocus;
-  camera.position.set(
-    look.x + Math.sin(yaw) * Math.cos(p) * d,
-    look.y + Math.sin(p) * d,
-    look.z + Math.cos(yaw) * Math.cos(p) * d,
-  );
-  camera.lookAt(look);
+  if (mode === 'walk') {
+    // follow behind you, kept inside the walls and under the verandah roof
+    const head = tmpCam.set(walker.pos.x, 1.35, walker.pos.z);
+    // pull the camera in along its line rather than letting a wall squash it overhead
+    const dir = tmpDir.set(
+      Math.sin(walkCam.yaw) * Math.cos(walkCam.pitch),
+      Math.sin(walkCam.pitch),
+      Math.cos(walkCam.yaw) * Math.cos(walkCam.pitch),
+    );
+    let d = walkCam.dist * (1 + tall * 0.25);
+    const room = (v, lo, hi, dv) => (dv > 0 ? (hi - v) / dv : dv < 0 ? (lo - v) / dv : Infinity);
+    d = Math.min(d,
+      room(head.x, VERANDAH.minX + 0.3, VERANDAH.maxX - 0.3, dir.x),
+      room(head.z, VERANDAH.back + 0.3, YARD.front - 0.3, dir.z));
+    wantPos.copy(head).addScaledVector(dir, Math.max(0.6, d));
+    if (wantPos.z < VERANDAH.front + 0.3) wantPos.y = Math.min(wantPos.y, 2.85); // under the roof
+    wantLook.copy(head);
+  } else {
+    // the menu slowly circles from your back to your face, framing both players
+    const menu = mode === 'menu' && !cover;
+    // on tall screens the camera stands further back, so keep its orbit clear of the house walls
+    if (menu) yaw = tall > 0 ? 1.0 + Math.sin(time * 0.15) * 0.75 : 1.25 + Math.sin(time * 0.15) * 1.05;
+    const wantFocus = mode === 'over' || (mode === 'playing' && game.turn === 1) ? 1 : 0;
+    babaFocus += (wantFocus - babaFocus) * Math.min(1, dt * 2.2);
+    target.lerpVectors(boardTarget, babaTarget, babaFocus);
+    const look = menu ? menuTarget : target;
+    // tall phone screens see less from side to side, so step back
+    const d = (menu ? 3.1 * (1 + tall * 0.33) : (dist + 0.25 * babaFocus) * (1 + tall * 0.16));
+    const p = menu ? 0.3 : pitch - 0.32 * babaFocus;
+    wantPos.set(
+      look.x + Math.sin(yaw) * Math.cos(p) * d,
+      look.y + Math.sin(p) * d,
+      look.z + Math.cos(yaw) * Math.cos(p) * d,
+    );
+    wantLook.copy(look);
+  }
+  // glide between the walking view and the table view; otherwise follow closely
+  const camGroup = mode === 'walk' ? 'walk' : 'table';
+  if (camGroup !== lastCamGroup) { camEase = 1.4; lastCamGroup = camGroup; }
+  camEase -= dt;
+  const ck = camEase > 0 ? 1 - Math.exp(-dt * 3.2) : mode === 'walk' ? 1 - Math.exp(-dt * 12) : 1;
+  if (!camReady || mode === 'cover') { camPos.copy(wantPos); camLook.copy(wantLook); camReady = true; }
+  camPos.lerp(wantPos, ck);
+  camLook.lerp(wantLook, ck);
+  camera.position.copy(camPos);
+  camera.lookAt(camLook);
+  // hide a lantern when the camera is right up against it
+  for (const o of house.occluders) o.visible = o.position.distanceTo(camPos) > 0.8;
+  // full detail (fingers, eyes) only for people near the camera
+  for (const person of [me, baba, ...regulars.map((r) => r.c)]) {
+    if (person) person.setDetail(person.root.getWorldPosition(tmpV).distanceTo(camPos) < 4.5);
+  }
+  followSun(mode === 'walk' ? walker.pos : camLook);
+
   const gaze = looks(dt);
-  if (me) me.animate(dt, { ...pose.me, time, leanIn: mode === 'cover' ? 1 : 0.35, look: gaze.me });
+  if (me) {
+    me.animate(dt, {
+      ...pose.me, time, leanIn: mode === 'cover' ? 1 : 0.35, look: gaze.me,
+      seated: mode !== 'walk' || (walker.seat && walker.seat.t > 0.45),
+      walk: mode === 'walk' ? walker.speed : 0,
+    });
+  }
   baba.animate(dt, { ...pose.baba, time: time + 1.3, look: gaze.baba });
+  stepRegulars(dt);
   stepChickens(dt);
   stepStreet(dt);
 
@@ -932,6 +1316,12 @@ if (cover) {
   mode = 'cover';
 }
 
+// Build every shader behind the loading screen (in parallel where the browser allows), so the
+// first frame doesn't freeze the page.
+// (with a time limit, so a slow or failed compile can never leave the loading screen up)
+await Promise.race([renderer.compileAsync(scene, camera).catch(() => {}), new Promise((r) => setTimeout(r, 10000))]);
+$('loading').hidden = true;
+markReady();
 requestAnimationFrame(frame);
 
 if (params.has('debug')) {
@@ -950,6 +1340,14 @@ if (params.has('debug')) {
     lessonPit: () => lesson.pit,
     baba,
     get me() { return me; },
+    renderer,
+    walker,
+    walkCam,
+    walkTo: (x, z) => walkTo(new THREE.Vector3(x, 0, z)),
+    stations: house.stations,
+    sit: () => { walker.pos.copy(stationById('ayo').seat); walker.seat = null; setMode('menu'); },
+    standUp,
+    regulars,
     screenOf: (i) => {
       const v = pitCenter(i).project(camera);
       return { x: (v.x * 0.5 + 0.5) * innerWidth, y: (-v.y * 0.5 + 0.5) * innerHeight };

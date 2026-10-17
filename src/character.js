@@ -3,6 +3,7 @@
 // Realistic proportions (head about 1/7.5 of standing height), shaped torso, elbows and knees,
 // and hands with jointed fingers. The character faces +Z and sits on a stool (hips 0.46 m up).
 import * as THREE from 'three';
+import { mergeInto } from './merge.js';
 
 const HEX = /^#[0-9a-f]{6}$/i;
 const HAIRS = ['short', 'afro', 'braids', 'bun', 'ponytail', 'dreads', 'bald'];
@@ -108,15 +109,16 @@ export function buildCharacter(rawStyle) {
   const collar = mesh(new THREE.TorusGeometry(0.058, 0.012, 8, 24), fabric(shade(style.primaryColor, 0.85)), body, 0, shoulderY + 0.01, 0.005);
   collar.rotation.x = Math.PI / 2 + 0.25;
 
-  // hips: trousers' seat for men, the top of the skirt for women
+  // hips: trousers' seat for men (only shown sitting), the top of the skirt for women
+  let seatMesh = null;
   if (female) {
     const skirt = [[0.15, 0.1], [0.168, 0.04], [0.19, -0.06], [0.215, -0.14]];
     const s = mesh(new THREE.LatheGeometry(skirt.map(([r, y]) => new THREE.Vector2(r, y)), 32), bottom, body, 0, hipY, 0);
     s.scale.z = 0.8;
     s.material.side = THREE.DoubleSide;
   } else {
-    const seat = mesh(new THREE.SphereGeometry(0.16, 24, 14), bottom, body, 0, hipY + 0.02, -0.01);
-    seat.scale.set(1.02, 0.55, 0.72);
+    seatMesh = mesh(new THREE.SphereGeometry(0.16, 24, 14), bottom, body, 0, hipY + 0.02, -0.03);
+    seatMesh.scale.set(1.0, 0.55, 0.6);
   }
 
   // ── Neck and head ──
@@ -392,8 +394,19 @@ export function buildCharacter(rawStyle) {
     gestureLen = seconds;
   }
 
-  function animate(dt, { reach = 0, reachToX = 0, cheer = 0, time = 0, leanIn = 1, grip = 0, look = null } = {}) {
+  // standing and walking: `seated` false stands the character up (blended over half a second);
+  // `walk` is walking speed in m/s, which swings the legs and arms in step
+  let sitNow = 1;
+  let phase = 0;
+  function animate(dt, { reach = 0, reachToX = 0, cheer = 0, time = 0, leanIn = 1, grip = 0, look = null, seated = true, walk = 0 } = {}) {
     const k = Math.min(1, dt * 10);
+    sitNow += ((seated ? 1 : 0) - sitNow) * Math.min(1, dt * 7);
+    if (Math.abs(sitNow - (seated ? 1 : 0)) < 0.002) sitNow = seated ? 1 : 0;
+    const stand = 1 - sitNow;
+    if (seatMesh) seatMesh.visible = sitNow > 0.3;
+    const stride = Math.min(1, walk / 1.6);
+    phase += dt * (walk > 0.05 ? 3.6 + walk * 2.6 : 0);
+    if (walk <= 0.05) phase += (Math.round(phase / Math.PI) * Math.PI - phase) * Math.min(1, dt * 8); // feet together when stopping
     reachNow += (reach - reachNow) * k;
     cheerNow += (cheer - cheerNow) * Math.min(1, dt * 6);
     const wantGrip = grip > 0 ? grip : reach > 0 ? 0.15 : 0.35;
@@ -415,18 +428,27 @@ export function buildCharacter(rawStyle) {
 
     // Lean in from the hips: the body tips forward around the hip point, and the legs
     // counter-rotate so the feet stay on the floor. Surprise and laughter rock back a little.
-    const lean = 0.08 + reachNow * 0.47 * leanIn - 0.2 * is('surprise') - 0.1 * is('laugh');
+    const seatLean = 0.08 + reachNow * 0.47 * leanIn - 0.2 * is('surprise') - 0.1 * is('laugh');
+    const lean = seatLean * sitNow + (0.03 + 0.05 * stride - 0.08 * is('laugh')) * stand;
     const bob = Math.abs(Math.sin(time * 15)) * 0.012 * is('laugh');
+    const stepBob = Math.abs(Math.cos(phase)) * 0.025 * stride; // the body rises over each step
     body.rotation.x = lean;
-    body.position.set(0, -SEAT_DROP + hipY * (1 - Math.cos(lean)) + Math.sin(time * 1.6) * 0.003 + bob, -hipY * Math.sin(lean));
+    body.position.set(
+      0,
+      (-SEAT_DROP + hipY * (1 - Math.cos(lean))) * sitNow + (stepBob - 0.02 * stride) * stand + Math.sin(time * 1.6) * 0.003 + bob,
+      -hipY * Math.sin(lean) * sitNow,
+    );
     legs.forEach(({ hip, knee }, i) => {
-      hip.rotation.x = -Math.PI / 2 - lean;
-      hip.rotation.z = (i ? 1 : -1) * 0.08;
-      knee.rotation.x = Math.PI / 2 - 0.05;
+      const p = phase + (i ? Math.PI : 0);
+      const standHip = Math.sin(p) * 0.42 * stride;
+      const standKnee = Math.max(0, Math.sin(p - 1.2)) * 0.75 * stride + 0.04;
+      hip.rotation.x = (-Math.PI / 2 - lean) * sitNow + (standHip - lean) * stand;
+      hip.rotation.z = (i ? 1 : -1) * (0.08 * sitNow + 0.02 * stand);
+      knee.rotation.x = (Math.PI / 2 - 0.05) * sitNow + standKnee * stand;
     });
 
     // head: follow the look target, plus nods, shakes and laughing
-    const want = look ?? { yaw: 0, pitch: 0.15 + reachNow * 0.05 };
+    const want = look ?? { yaw: 0, pitch: (0.15 + reachNow * 0.05) * sitNow + 0.04 * stand };
     const lk = Math.min(1, dt * 5);
     lookNow.yaw += (THREE.MathUtils.clamp(want.yaw, -0.9, 0.9) - lookNow.yaw) * lk;
     lookNow.pitch += (THREE.MathUtils.clamp(want.pitch, -0.35, 0.75) - lookNow.pitch) * lk;
@@ -491,22 +513,68 @@ export function buildCharacter(rawStyle) {
         curl += (0 - curl) * sur;
       }
 
-      shoulder.rotation.x = -(upper + lean) * (1 - cheerNow) - 2.9 * cheerNow;
-      elbow.rotation.x = -bend * (1 - cheerNow) - 0.35 * cheerNow;
-      // With the forearm forward the hand's palm side (+z) would face up, so the wrist turns
-      // it over (pronates): palms down on the thighs and over the board, thumbs inward.
-      wrist.rotation.y = wristY * (1 - cheerNow);
-      wrist.rotation.x = wristX;
-      shoulder.rotation.z = z * (1 - cheerNow) + side * 0.35 * cheerNow + wave * side;
-      curlHand(hands[i], curl + cheerNow * 0.5 * (i === REACH ? 0 : 1));
+      // standing: arms hang at the sides, palms in, swinging opposite to the legs
+      const swingArm = Math.sin(phase + (i ? 0 : Math.PI)) * 0.35 * stride;
+      const st = stand * (1 - chin) * (1 - clap);
+      const sx = (-(upper + lean) * (1 - cheerNow) - 2.9 * cheerNow) * (1 - st) + (-swingArm - lean * 0.5) * st;
+      shoulder.rotation.x = sx;
+      elbow.rotation.x = (-bend * (1 - cheerNow) - 0.35 * cheerNow) * (1 - st) + (-0.18 - 0.25 * stride) * st;
+      // Seated, with the forearm forward, the hand's palm side (+z) would face up, so the wrist
+      // turns it over: palms down on the thighs and over the board, thumbs inward. Standing,
+      // the palms turn in to face the legs.
+      wrist.rotation.y = wristY * (1 - cheerNow) * (1 - st) + (-side * Math.PI / 2) * st;
+      wrist.rotation.x = wristX * (1 - st);
+      shoulder.rotation.z = (z * (1 - cheerNow) + side * 0.35 * cheerNow + wave * side) * (1 - st) + side * 0.07 * st;
+      curlHand(hands[i], (curl + cheerNow * 0.5 * (i === REACH ? 0 : 1)) * (1 - st) + 0.3 * st);
     });
   }
 
   function dispose() {
     for (const g of geometries) g.dispose();
+    root.traverse((o) => { if (o.isMesh) o.geometry.dispose(); }); // the merged parts
     for (const m of materials.values()) m.dispose();
   }
 
+  // ── Merge parts that never move relative to each other (far fewer draw calls) ──
+  const joints = new Set([
+    body, head,
+    ...arms.flatMap((a) => [a.shoulder, a.elbow, a.wrist]),
+    ...hands.flatMap((h) => [...h.fingers.flat(), h.thumbBase, h.thumbTip]),
+    ...legs.flatMap((l) => [l.hip, l.knee]),
+  ]);
+  const moving = new Set([...lids, ...brows, seatMesh].filter(Boolean));
+  const byJoint = new Map();
+  root.traverse((o) => {
+    if (!o.isMesh || moving.has(o)) return;
+    // tiny parts (fingers, eyes, lips) don't need to cast shadows
+    if (!o.geometry.boundingSphere) o.geometry.computeBoundingSphere();
+    const s = o.getWorldScale(new THREE.Vector3());
+    if (o.geometry.boundingSphere.radius * Math.max(s.x, s.y, s.z) < 0.035) o.castShadow = false;
+    let j = o.parent;
+    while (j && j !== root && !joints.has(j)) j = j.parent;
+    const key = j ?? root;
+    if (!byJoint.has(key)) byJoint.set(key, []);
+    byJoint.get(key).push(o);
+  });
+  for (const [joint, list] of byJoint) mergeInto(joint, list);
+
+  // ── Level of detail: from a few metres away, fingers and small face parts can't be seen,
+  // so they're skipped (each is a separate draw call) ──
+  const fine = new Set([white, iris, lips]);
+  const details = [...lids, ...brows];
+  for (const h of hands) {
+    for (const node of [...h.fingers.flat(), h.thumbBase, h.thumbTip]) {
+      for (const c of node.children) if (c.isMesh) details.push(c);
+    }
+  }
+  head.traverse((o) => { if (o.isMesh && fine.has(o.material)) details.push(o); });
+  let detailed = true;
+  function setDetail(on) {
+    if (on === detailed) return;
+    detailed = on;
+    for (const m of details) m.visible = on;
+  }
+
   animate(0);
-  return { root, body, head, headY, headR: R, palm: hands[REACH].palmPoint, animate, gesture, dispose, style };
+  return { root, body, head, headY, headR: R, palm: hands[REACH].palmPoint, animate, gesture, setDetail, dispose, style };
 }

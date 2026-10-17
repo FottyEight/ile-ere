@@ -14,7 +14,7 @@
 <div id="stage"></div>
 <div class="loading" id="loading">
   <div>
-    <p>Baba is setting up the board…</p>
+    <p id="loading-text">Baba is opening the joint…</p>
     <div class="loading-track"><div id="loading-bar"></div></div>
   </div>
 </div>
@@ -49,6 +49,11 @@
   <button class="skip" id="skip-lesson" type="button" hidden>Skip the lesson</button>
 </div>
 
+<div class="walk-hud" id="walk-hud" hidden>
+  <button class="sit" id="sit-prompt" type="button" hidden></button>
+  <p class="hint">WASD or arrows to walk (Shift to hurry) · drag to look · tap the floor or a table to go there</p>
+</div>
+
 <section class="screen" id="menu">
   <div class="panel">
     <p class="kicker">A start.ng game</p>
@@ -72,7 +77,8 @@
       <ul id="record-rows"></ul>
       <p class="note" id="record-best"></p>
     </div>
-    <button class="big" id="play" type="button">Sit down and play</button>
+    <button class="big" id="play" type="button">Play Ayo</button>
+    <button class="secondary wide" id="stand-up" type="button">Stand up and look around</button>
     <p class="note" id="menu-signin-note">Playing as a guest. <button class="link" id="menu-signin" type="button">Sign in with start.ng</button> to play as your own character and save your win streak.</p>
   </div>
 </section>
@@ -97,6 +103,7 @@
     <ol class="board" id="board"></ol>
     <p class="note" id="board-note"></p>
     <button class="big" id="again" type="button">Play again</button>
+    <button class="secondary wide" id="over-leave" type="button">Leave the table</button>
   </div>
 </section>
 
