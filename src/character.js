@@ -1,6 +1,7 @@
 // Builds the player's start.ng character from its `style` (https://start.ng/docs#character-style-fields).
 // Every field changes the model: body shape, top, trousers/skirt, skin, hair, hat and accessory.
-// The character faces +Z and is posed sitting on a stool (hips 0.46 m above y = 0).
+// Realistic proportions (head about 1/7.5 of standing height), shaped torso, elbows and knees,
+// and hands with jointed fingers. The character faces +Z and sits on a stool (hips 0.46 m up).
 import * as THREE from 'three';
 
 const HEX = /^#[0-9a-f]{6}$/i;
@@ -35,260 +36,385 @@ export function buildCharacter(rawStyle) {
   const geometries = [];
   const materials = new Map();
 
-  const mat = (hex, opts = {}) => {
-    const key = hex + JSON.stringify(opts);
-    if (!materials.has(key)) {
-      materials.set(key, new THREE.MeshStandardMaterial({ color: hex, roughness: 0.75, ...opts }));
-    }
-    return materials.get(key);
-  };
   const shade = (hex, k) => '#' + new THREE.Color(hex).multiplyScalar(k).getHexString();
+  const fabric = (hex, extra = {}) => cached(`f${hex}${JSON.stringify(extra)}`, () => new THREE.MeshPhysicalMaterial({
+    color: hex, roughness: 0.88, sheen: 0.6, sheenRoughness: 0.8, sheenColor: shade(hex, 1.25), ...extra,
+  }));
+  const plain = (hex, extra = {}) => cached(`p${hex}${JSON.stringify(extra)}`, () => new THREE.MeshStandardMaterial({ color: hex, roughness: 0.6, ...extra }));
+  function cached(key, make) {
+    if (!materials.has(key)) materials.set(key, make());
+    return materials.get(key);
+  }
   const mesh = (geometry, material, parent, x = 0, y = 0, z = 0) => {
     geometries.push(geometry);
     const m = new THREE.Mesh(geometry, material);
     m.position.set(x, y, z);
     m.castShadow = true;
+    m.receiveShadow = true;
     parent.add(m);
     return m;
   };
+  const group = (parent, x = 0, y = 0, z = 0) => {
+    const g = new THREE.Group();
+    g.position.set(x, y, z);
+    parent.add(g);
+    return g;
+  };
+  // a limb segment hanging down from its joint: capsule of total length `len`
+  // (r2 is the radius at the far end; the capsule uses the average and tapers by scaling)
+  const limb = (parent, radius, len, material, r2 = radius) => {
+    const r = (radius + r2) / 2;
+    return mesh(new THREE.CapsuleGeometry(r, Math.max(0.001, len - 2 * r), 6, 14), material, parent, 0, -len / 2, 0);
+  };
 
-  const top = mat(style.primaryColor);
-  const bottom = mat(style.secondaryColor);
-  const skin = mat(style.skinColor);
-  const hair = mat(style.hairColor, { roughness: 0.95 });
-  const dark = mat('#1c1b1f');
-  const shoe = mat('#26232a');
-  const gold = mat('#f2c14e', { metalness: 0.6, roughness: 0.3 });
+  // skin is slightly soft and sheeny, like real skin under daylight
+  const skin = cached('skin', () => new THREE.MeshPhysicalMaterial({
+    color: style.skinColor, roughness: 0.52, sheen: 0.35, sheenRoughness: 0.45, sheenColor: shade(style.skinColor, 1.6),
+  }));
+  const lips = plain(shade(style.skinColor, 0.62), { roughness: 0.4 });
+  const top = fabric(style.primaryColor);
+  const bottom = fabric(style.secondaryColor);
+  const hair = cached('hair', () => new THREE.MeshPhysicalMaterial({
+    color: style.hairColor, roughness: 0.75, sheen: 0.5, sheenRoughness: 0.4, sheenColor: shade(style.hairColor, 2.2),
+  }));
+  const shoe = plain('#2a2420', { roughness: 0.45 });
+  const sole = plain('#141110', { roughness: 0.8 });
+  const white = plain('#f3efe8', { roughness: 0.3 });
+  const iris = plain('#2a1a10', { roughness: 0.2 });
+  const dark = plain('#141416', { roughness: 0.35, metalness: 0.3 });
+  const gold = plain('#e8b84a', { metalness: 0.8, roughness: 0.25 });
 
   const root = new THREE.Group();
-  const body = new THREE.Group(); // bobs and leans; root only moves and turns
+  const body = new THREE.Group(); // leans and breathes; root only moves and turns
   root.add(body);
 
-  // ── Legs (trousers for male, skirt over bare legs for female) ──
-  const hipY = female ? 0.8 : 0.84;
-  // each leg: hip pivot → thigh → knee pivot → shin and shoe, so the character can sit
-  const knees = [];
-  const legs = [-1, 1].map((side) => {
-    const pivot = new THREE.Group();
-    pivot.position.set(side * (female ? 0.1 : 0.12), hipY, 0);
-    body.add(pivot);
-    const len = hipY - 0.07;
-    const half = len / 2;
-    const r = female ? 0.075 : 0.105;
-    const legMat = female ? skin : bottom;
-    mesh(new THREE.CylinderGeometry(r, r * 0.92, half + 0.02, 10), legMat, pivot, 0, -half / 2, 0);
-    const knee = new THREE.Group();
-    knee.position.y = -half;
-    pivot.add(knee);
-    mesh(new THREE.SphereGeometry(r * 0.92, 10, 8), legMat, knee);
-    mesh(new THREE.CylinderGeometry(r * 0.92, r * 0.85, half, 10), legMat, knee, 0, -half / 2, 0);
-    mesh(new THREE.BoxGeometry(0.15, 0.09, 0.27), shoe, knee, 0, -half - 0.02, 0.05);
-    knees.push(knee);
-    return pivot;
-  });
+  // ── Proportions (metres, standing) ──
+  const hipY = female ? 0.84 : 0.88;
+  const thighLen = female ? 0.41 : 0.43;
+  const shinLen = hipY - thighLen - 0.04;
+  const torsoLen = female ? 0.5 : 0.53;
+  const shoulderY = hipY + torsoLen;
+  const shoulderX = female ? 0.165 : 0.2;
+  const R = 0.105; // head radius
+  const headY = shoulderY + 0.2;
+
+  // ── Torso: a lathed shirt shape, flattened front to back ──
+  const profile = female
+    ? [[0.135, -0.02], [0.155, 0.05], [0.14, 0.13], [0.118, 0.22], [0.135, 0.3], [0.15, 0.36], [0.148, 0.43], [0.13, 0.48], [0.06, torsoLen], [0.045, torsoLen + 0.02]]
+    : [[0.145, -0.02], [0.15, 0.06], [0.142, 0.16], [0.148, 0.26], [0.168, 0.36], [0.176, 0.44], [0.155, 0.5], [0.065, torsoLen], [0.05, torsoLen + 0.02]];
+  const torso = mesh(new THREE.LatheGeometry(profile.map(([r, y]) => new THREE.Vector2(r, y)), 32), top, body, 0, hipY, 0);
+  torso.scale.set(female ? 1.12 : 1.22, 1, 0.66);
+  // collar
+  const collar = mesh(new THREE.TorusGeometry(0.058, 0.012, 8, 24), fabric(shade(style.primaryColor, 0.85)), body, 0, shoulderY + 0.01, 0.005);
+  collar.rotation.x = Math.PI / 2 + 0.25;
+
+  // hips: trousers' seat for men, the top of the skirt for women
   if (female) {
-    mesh(new THREE.CylinderGeometry(0.19, 0.34, 0.44, 16), bottom, body, 0, hipY - 0.12, 0);
+    const skirt = [[0.15, 0.1], [0.168, 0.04], [0.19, -0.06], [0.215, -0.14]];
+    const s = mesh(new THREE.LatheGeometry(skirt.map(([r, y]) => new THREE.Vector2(r, y)), 32), bottom, body, 0, hipY, 0);
+    s.scale.z = 0.8;
+    s.material.side = THREE.DoubleSide;
   } else {
-    mesh(new THREE.CylinderGeometry(0.205, 0.215, 0.1, 14), bottom, body, 0, hipY - 0.05, 0).scale.z = 0.75;
+    const seat = mesh(new THREE.SphereGeometry(0.16, 24, 14), bottom, body, 0, hipY + 0.02, -0.01);
+    seat.scale.set(1.02, 0.55, 0.72);
   }
 
-  // ── Torso and arms (the top) ──
-  const torsoH = 0.58;
-  const shoulderR = female ? 0.21 : 0.26;
-  const torsoTop = hipY + torsoH;
-  const torso = mesh(new THREE.CylinderGeometry(shoulderR, female ? 0.18 : 0.21, torsoH, 16), top, body, 0, hipY + torsoH / 2, 0);
-  torso.scale.z = 0.72;
-  const arms = [-1, 1].map((side) => {
-    const pivot = new THREE.Group();
-    pivot.position.set(side * (shoulderR + 0.05), torsoTop - 0.07, 0);
-    body.add(pivot);
-    mesh(new THREE.SphereGeometry(0.095, 12, 10), top, pivot);
-    mesh(new THREE.CylinderGeometry(0.078, 0.07, 0.3, 10), top, pivot, 0, -0.16, 0);
-    mesh(new THREE.CylinderGeometry(0.06, 0.055, 0.28, 10), skin, pivot, 0, -0.44, 0);
-    mesh(new THREE.SphereGeometry(0.068, 10, 8), skin, pivot, 0, -0.6, 0);
-    return pivot;
-  });
-  // a point just under the right hand's palm, where carried seeds sit
-  const palm = new THREE.Object3D();
-  palm.position.set(0, -0.66, 0.03);
-  arms[1].add(palm);
-
-  // ── Head ──
-  const headY = torsoTop + 0.29;
-  const headR = 0.21;
-  mesh(new THREE.CylinderGeometry(0.07, 0.08, 0.12, 10), skin, body, 0, torsoTop + 0.04, 0);
-  const headMesh = mesh(new THREE.SphereGeometry(headR, 24, 18), skin, body, 0, headY, 0);
-  headMesh.scale.y = 1.08;
+  // ── Neck and head ──
+  mesh(new THREE.CylinderGeometry(0.045, 0.052, 0.12, 14), skin, body, 0, shoulderY + 0.06, 0);
+  const head = group(body, 0, headY, 0.005);
+  const skull = mesh(new THREE.SphereGeometry(R, 32, 24), skin, head);
+  skull.scale.set(0.88, 1.08, 0.98);
+  const jaw = mesh(new THREE.SphereGeometry(R * 0.78, 24, 16), skin, head, 0, -R * 0.42, R * 0.18);
+  jaw.scale.set(female ? 0.9 : 0.98, 0.78, 0.92);
+  const nose = mesh(new THREE.SphereGeometry(R * 0.17, 12, 10), skin, head, 0, -R * 0.12, R * 0.93);
+  nose.scale.set(1.15, 0.9, 1.0);
+  mesh(new THREE.SphereGeometry(R * 0.1, 10, 8), skin, head, 0, R * 0.04, R * 0.9).scale.set(0.8, 1.6, 0.9); // bridge
+  // lips
+  for (const [y, w] of [[-R * 0.42, 0.95], [-R * 0.52, 0.8]]) {
+    const l = mesh(new THREE.CapsuleGeometry(R * 0.07, R * 0.28, 4, 10), lips, head, 0, y, R * 0.86);
+    l.rotation.z = Math.PI / 2;
+    l.scale.set(1, w, 0.7);
+  }
+  // eyes, brows and ears
   for (const side of [-1, 1]) {
-    mesh(new THREE.SphereGeometry(0.028, 8, 6), dark, body, side * 0.075, headY + 0.03, 0.19);
-    mesh(new THREE.SphereGeometry(0.045, 8, 6), skin, body, side * 0.205, headY, 0);
+    const eye = group(head, side * R * 0.36, R * 0.13, R * 0.74);
+    mesh(new THREE.SphereGeometry(R * 0.15, 14, 12), white, eye);
+    mesh(new THREE.SphereGeometry(R * 0.085, 12, 10), iris, eye, 0, 0, R * 0.09);
+    const lid = mesh(new THREE.SphereGeometry(R * 0.165, 14, 8, 0, Math.PI * 2, 0, Math.PI * 0.42), skin, eye);
+    lid.rotation.x = 0.35;
+    const brow = mesh(new THREE.CapsuleGeometry(R * 0.035, R * 0.26, 4, 8), hair, head, side * R * 0.37, R * 0.38, R * 0.86);
+    brow.rotation.z = Math.PI / 2 + side * 0.12;
+    const ear = mesh(new THREE.SphereGeometry(R * 0.26, 12, 10), skin, head, side * R * 0.87, -R * 0.02, -R * 0.05);
+    ear.scale.set(0.38, 1, 0.68);
   }
-  mesh(new THREE.BoxGeometry(0.08, 0.014, 0.01), mat(shade(style.skinColor, 0.55)), body, 0, headY - 0.09, 0.2);
 
   // ── Hair ──
-  const cap = () => {
-    const m = mesh(new THREE.SphereGeometry(headR + 0.018, 24, 14, 0, Math.PI * 2, 0, Math.PI * 0.56), hair, body, 0, headY + 0.005, -0.005);
-    m.rotation.x = -0.42;
-    m.scale.y = 1.08;
-    return m;
+  let hatY = R * 1.06; // where a hat sits, above the head centre
+  let hatScale = 1;
+  const cap = (extra = 1.06) => {
+    const c = mesh(new THREE.SphereGeometry(R * extra, 32, 16, 0, Math.PI * 2, 0, Math.PI * 0.6), hair, head, 0, R * 0.04, -R * 0.06);
+    c.rotation.x = -0.5;
+    c.scale.set(0.92, 1.08, 1.0);
+    return c;
   };
-  const strands = (count, from, to, radius, len, y) => {
-    for (let i = 0; i < count; i++) {
-      const a = from + ((to - from) * i) / (count - 1);
-      const s = mesh(new THREE.CylinderGeometry(radius, radius * 0.8, len, 6), hair, body, Math.sin(a) * 0.2, y - len / 2, Math.cos(a) * 0.2);
-      s.rotation.x = Math.cos(a) * -0.18;
-      s.rotation.z = Math.sin(a) * 0.18;
-    }
+  const strand = (a, y, len, radius) => {
+    const pivot = group(head, Math.sin(a) * R * 0.86, y, Math.cos(a) * R * 0.86 - R * 0.05);
+    const s = mesh(new THREE.CapsuleGeometry(radius, len, 4, 8), hair, pivot, 0, -len / 2, 0);
+    pivot.rotation.x = Math.cos(a) * -0.2;
+    pivot.rotation.z = Math.sin(a) * 0.15;
+    return s;
   };
-  let hatBase = headY + headR * 1.08; // where a hat sits
   switch (style.hair) {
     case 'short':
       cap();
       break;
-    case 'afro':
-      mesh(new THREE.SphereGeometry(0.31, 20, 16), hair, body, 0, headY + 0.11, -0.1);
-      hatBase = headY + 0.4;
+    case 'afro': {
+      // a full rounded afro with a soft, bumpy outline
+      const g = new THREE.IcosahedronGeometry(R * 1.55, 4);
+      const p = g.attributes.position;
+      for (let i = 0; i < p.count; i++) {
+        const v = new THREE.Vector3().fromBufferAttribute(p, i);
+        const n = 1 + Math.sin(v.x * 140) * Math.sin(v.y * 130) * Math.sin(v.z * 150) * 0.035;
+        v.multiplyScalar(n);
+        p.setXYZ(i, v.x, v.y, v.z);
+      }
+      g.computeVertexNormals();
+      const a = mesh(g, hair, head, 0, R * 0.42, -R * 0.32);
+      a.scale.set(1, 0.92, 0.95);
+      hatY = R * 1.85;
+      hatScale = 1.45;
       break;
+    }
     case 'braids':
-      cap();
-      strands(9, Math.PI * 0.55, Math.PI * 1.45, 0.026, 0.46, headY + 0.02);
+      cap(1.05);
+      for (let i = 0; i < 13; i++) strand(Math.PI * 0.55 + (i / 12) * Math.PI * 0.9, R * 0.15, R * 2.6, R * 0.07);
       break;
     case 'bun':
       cap();
-      mesh(new THREE.SphereGeometry(0.11, 14, 12), hair, body, 0, headY + 0.2, -0.12);
+      mesh(new THREE.SphereGeometry(R * 0.42, 20, 16), hair, head, 0, R * 0.78, -R * 0.62);
       break;
     case 'ponytail': {
       cap();
-      mesh(new THREE.SphereGeometry(0.045, 8, 6), mat(style.primaryColor), body, 0, headY + 0.08, -0.22);
-      const tail = mesh(new THREE.CylinderGeometry(0.075, 0.025, 0.4, 10), hair, body, 0, headY - 0.08, -0.29);
+      mesh(new THREE.TorusGeometry(R * 0.16, R * 0.05, 8, 16), fabric(style.primaryColor), head, 0, R * 0.3, -R * 0.95);
+      const tail = group(head, 0, R * 0.3, -R * 1.0);
+      mesh(new THREE.CapsuleGeometry(R * 0.2, R * 1.6, 6, 12), hair, tail, 0, -R * 0.95, 0).scale.set(1, 1, 0.7);
       tail.rotation.x = 0.35;
       break;
     }
     case 'dreads':
-      cap();
-      strands(12, Math.PI * 0.35, Math.PI * 1.65, 0.042, 0.32, headY + 0.03);
+      cap(1.07);
+      for (let i = 0; i < 18; i++) strand(Math.PI * 0.35 + (i / 17) * Math.PI * 1.3, R * 0.35, R * 1.9, R * 0.11);
       break;
     case 'bald':
+      hatY = R * 0.98;
       break;
   }
 
   // ── Hat ──
-  const hatScale = style.hair === 'afro' ? 1.25 : 1;
-  const hat = new THREE.Group();
-  hat.position.y = hatBase;
+  const hat = group(head, 0, hatY, -R * 0.04);
   hat.scale.setScalar(hatScale);
-  body.add(hat);
   switch (style.hat) {
     case 'cap': {
-      const c = mesh(new THREE.SphereGeometry(0.235, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), mat(style.secondaryColor), hat, 0, -0.07, 0);
-      c.scale.y = 0.9;
-      mesh(new THREE.BoxGeometry(0.3, 0.02, 0.2), mat(style.secondaryColor), hat, 0, -0.065, 0.27);
-      mesh(new THREE.SphereGeometry(0.025, 8, 6), mat(style.primaryColor), hat, 0, 0.14, 0);
+      const c = mesh(new THREE.SphereGeometry(R * 1.12, 28, 12, 0, Math.PI * 2, 0, Math.PI / 2), fabric(style.secondaryColor), hat, 0, -R * 0.55, 0);
+      c.scale.y = 0.95;
+      const brim = mesh(new THREE.CylinderGeometry(R * 0.8, R * 0.8, R * 0.06, 24, 1, false, -Math.PI / 2, Math.PI), fabric(style.secondaryColor), hat, 0, -R * 0.52, R * 0.5);
+      brim.scale.set(1, 1, 1.1);
+      mesh(new THREE.SphereGeometry(R * 0.1, 10, 8), fabric(style.primaryColor), hat, 0, R * 0.52, 0);
       break;
     }
     case 'beanie': {
-      const b = mesh(new THREE.SphereGeometry(0.24, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2), mat(style.primaryColor, { roughness: 1 }), hat, 0, -0.07, 0);
-      b.scale.y = 1.15;
-      const fold = mesh(new THREE.TorusGeometry(0.235, 0.04, 8, 24), mat(shade(style.primaryColor, 0.75), { roughness: 1 }), hat, 0, -0.06, 0);
+      const b = mesh(new THREE.SphereGeometry(R * 1.13, 28, 14, 0, Math.PI * 2, 0, Math.PI / 2), fabric(style.primaryColor), hat, 0, -R * 0.5, 0);
+      b.scale.y = 1.2;
+      const fold = mesh(new THREE.TorusGeometry(R * 1.1, R * 0.17, 10, 32), fabric(shade(style.primaryColor, 0.78)), hat, 0, -R * 0.45, 0);
       fold.rotation.x = Math.PI / 2;
-      mesh(new THREE.SphereGeometry(0.06, 10, 8), mat('#f4f1ea', { roughness: 1 }), hat, 0, 0.22, 0);
+      mesh(new THREE.SphereGeometry(R * 0.26, 14, 12), fabric('#f4f1ea'), hat, 0, R * 0.9, 0);
       break;
     }
     case 'tophat': {
-      const black = mat('#1d1d22', { roughness: 0.5 });
-      mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.025, 24), black, hat, 0, -0.03, 0);
-      mesh(new THREE.CylinderGeometry(0.17, 0.18, 0.34, 24), black, hat, 0, 0.14, 0);
-      mesh(new THREE.CylinderGeometry(0.182, 0.182, 0.05, 24), mat(style.primaryColor), hat, 0, 0.02, 0);
+      const black = plain('#1d1d22', { roughness: 0.45 });
+      mesh(new THREE.CylinderGeometry(R * 1.55, R * 1.55, R * 0.08, 32), black, hat, 0, -R * 0.15, 0);
+      mesh(new THREE.CylinderGeometry(R * 0.92, R * 0.98, R * 1.6, 32), black, hat, 0, R * 0.66, 0);
+      mesh(new THREE.CylinderGeometry(R * 1.0, R * 1.0, R * 0.22, 32), fabric(style.primaryColor), hat, 0, R * 0.0, 0);
       break;
     }
     case 'crown': {
-      mesh(new THREE.CylinderGeometry(0.17, 0.16, 0.1, 20, 1, true), gold, hat, 0, 0, 0).material.side = THREE.DoubleSide;
-      for (let i = 0; i < 6; i++) {
-        const a = (i / 6) * Math.PI * 2;
-        mesh(new THREE.ConeGeometry(0.035, 0.11, 6), gold, hat, Math.sin(a) * 0.165, 0.1, Math.cos(a) * 0.165);
-        mesh(new THREE.SphereGeometry(0.02, 6, 6), mat('#e0245e', { roughness: 0.2 }), hat, Math.sin(a) * 0.172, 0.0, Math.cos(a) * 0.172);
+      const band = mesh(new THREE.CylinderGeometry(R * 0.92, R * 0.86, R * 0.42, 32, 1, true), gold, hat, 0, 0, 0);
+      band.material.side = THREE.DoubleSide;
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2;
+        mesh(new THREE.ConeGeometry(R * 0.14, R * 0.42, 8), gold, hat, Math.sin(a) * R * 0.9, R * 0.38, Math.cos(a) * R * 0.9);
+        mesh(new THREE.SphereGeometry(R * 0.08, 10, 8), plain('#c8143c', { roughness: 0.15 }), hat, Math.sin(a) * R * 0.93, 0, Math.cos(a) * R * 0.93);
       }
       break;
     }
   }
+
+  // ── Arms: shoulder → upper arm (sleeve) → elbow → forearm → wrist → hand with fingers ──
+  const sleeve = fabric(style.primaryColor);
+  const hands = [];
+  const arms = [-1, 1].map((side) => {
+    const shoulder = group(body, side * shoulderX, shoulderY - 0.045, 0);
+    mesh(new THREE.SphereGeometry(0.05, 16, 12), sleeve, shoulder).scale.set(1, 0.9, 0.95);
+    limb(shoulder, 0.047, 0.15, sleeve, 0.044); // short sleeve
+    limb(shoulder, 0.041, 0.29, skin, 0.036).position.y = -0.155;
+    const elbow = group(shoulder, 0, -0.29, 0);
+    limb(elbow, 0.036, 0.26, skin, 0.03);
+    const wrist = group(elbow, 0, -0.26, 0);
+    const hand = buildHand(wrist, side);
+    hands.push(hand);
+    return { shoulder, elbow, wrist };
+  });
+
+  // Palm faces +z (forward) in the rest pose; fingers curl toward +z. The thumb is on the
+  // outer side: -x for the character's right hand (side −1), +x for the left.
+  function buildHand(wrist, side) {
+    const palm = mesh(new THREE.CapsuleGeometry(0.026, 0.04, 6, 12), skin, wrist, 0, -0.045, 0);
+    palm.scale.set(1.55, 1, 0.62);
+    const fingers = [];
+    const spec = [[-0.022, 0.044, 0.008], [-0.007, 0.05, 0.0085], [0.008, 0.048, 0.0082], [0.022, 0.038, 0.0075]];
+    for (const [x, len, r] of spec) {
+      const knuckle = group(wrist, x * -side, -0.083, 0.002);
+      limb(knuckle, r, len * 0.55, skin);
+      const mid = group(knuckle, 0, -len * 0.55, 0);
+      limb(mid, r * 0.95, len * 0.48, skin, r * 0.85);
+      fingers.push([knuckle, mid]);
+    }
+    const thumbBase = group(wrist, side * 0.03, -0.035, 0.012);
+    thumbBase.rotation.z = side * 0.55;
+    limb(thumbBase, 0.0105, 0.03, skin);
+    const thumbTip = group(thumbBase, 0, -0.03, 0);
+    limb(thumbTip, 0.0095, 0.026, skin, 0.008);
+    const palmPoint = new THREE.Object3D();
+    palmPoint.position.set(0, -0.06, 0.035); // in front of the palm, where held seeds sit
+    wrist.add(palmPoint);
+    return { fingers, thumbBase, thumbTip, palmPoint };
+  }
+  function curlHand(h, curl) {
+    for (const [knuckle, mid] of h.fingers) {
+      knuckle.rotation.x = curl * 1.15;
+      mid.rotation.x = curl * 1.35;
+    }
+    h.thumbBase.rotation.x = curl * 0.5;
+    h.thumbTip.rotation.x = curl * 0.7;
+  }
+
+  // ── Legs: hip → thigh → knee → shin → shoe ──
+  const legMat = female ? skin : bottom;
+  const legs = [-1, 1].map((side) => {
+    const hip = group(body, side * (female ? 0.085 : 0.095), hipY, 0);
+    limb(hip, female ? 0.068 : 0.078, thighLen + 0.03, legMat, female ? 0.052 : 0.062).position.y = -(thighLen + 0.03) / 2 + 0.015;
+    const knee = group(hip, 0, -thighLen, 0);
+    mesh(new THREE.SphereGeometry(female ? 0.052 : 0.062, 14, 12), legMat, knee);
+    limb(knee, female ? 0.05 : 0.058, shinLen, legMat, female ? 0.036 : 0.048);
+    const ankle = group(knee, 0, -shinLen, 0);
+    const foot = mesh(new THREE.CapsuleGeometry(0.042, 0.13, 6, 12), shoe, ankle, 0, -0.03, 0.06);
+    foot.rotation.x = Math.PI / 2;
+    foot.scale.set(1.05, 1, 0.75);
+    const s = mesh(new THREE.BoxGeometry(0.09, 0.012, 0.25), sole, ankle, 0, -0.058, 0.06);
+    s.castShadow = false;
+    return { hip, knee };
+  });
 
   // ── Accessory ──
   switch (style.accessory) {
     case 'glasses':
       for (const side of [-1, 1]) {
-        mesh(new THREE.TorusGeometry(0.052, 0.012, 6, 16), dark, body, side * 0.077, headY + 0.03, 0.205);
-        const arm = mesh(new THREE.BoxGeometry(0.012, 0.012, 0.2), dark, body, side * 0.13, headY + 0.04, 0.1);
-        arm.rotation.y = side * 0.25;
+        const lens = mesh(new THREE.TorusGeometry(R * 0.2, R * 0.025, 8, 24), dark, head, side * R * 0.36, R * 0.13, R * 0.95);
+        lens.scale.set(1.1, 0.9, 1);
+        mesh(new THREE.CircleGeometry(R * 0.19, 20), plain('#9fb8c8', { transparent: true, opacity: 0.25, roughness: 0.05 }), head, side * R * 0.36, R * 0.13, R * 0.95);
+        const temple = mesh(new THREE.BoxGeometry(R * 0.03, R * 0.03, R * 0.9), dark, head, side * R * 0.62, R * 0.15, R * 0.5);
+        temple.rotation.y = side * 0.12;
       }
-      mesh(new THREE.BoxGeometry(0.05, 0.012, 0.012), dark, body, 0, headY + 0.035, 0.21);
+      mesh(new THREE.BoxGeometry(R * 0.2, R * 0.03, R * 0.03), dark, head, 0, R * 0.16, R * 0.98);
       break;
     case 'earrings':
       for (const side of [-1, 1]) {
-        const hoop = mesh(new THREE.TorusGeometry(0.035, 0.009, 6, 14), gold, body, side * 0.215, headY - 0.07, 0.01);
+        const hoop = mesh(new THREE.TorusGeometry(R * 0.13, R * 0.025, 8, 20), gold, head, side * R * 0.9, -R * 0.36, -R * 0.02);
         hoop.rotation.y = Math.PI / 2;
       }
       break;
-    case 'beard':
-      mesh(new THREE.SphereGeometry(headR + 0.012, 20, 10, 0, Math.PI, Math.PI * 0.56, Math.PI * 0.34), hair, body, 0, headY, 0).material.side = THREE.DoubleSide;
+    case 'beard': {
+      const b = mesh(new THREE.SphereGeometry(R * 0.86, 24, 14, 0, Math.PI, Math.PI * 0.42, Math.PI * 0.5), hair, head, 0, -R * 0.3, R * 0.12);
+      b.rotation.y = -Math.PI / 2 + Math.PI / 2; // front half
+      b.scale.set(0.98, 0.95, 1.0);
+      b.material.side = THREE.DoubleSide;
+      const moustache = mesh(new THREE.CapsuleGeometry(R * 0.06, R * 0.32, 4, 8), hair, head, 0, -R * 0.33, R * 0.9);
+      moustache.rotation.z = Math.PI / 2;
       break;
+    }
     case 'scarf': {
-      const scarf = mat(style.secondaryColor, { roughness: 1 });
-      const ring = mesh(new THREE.TorusGeometry(0.12, 0.06, 10, 20), scarf, body, 0, torsoTop + 0.02, 0);
+      const scarf = fabric(style.secondaryColor);
+      const ring = mesh(new THREE.TorusGeometry(0.075, 0.035, 12, 28), scarf, body, 0, shoulderY + 0.035, 0.005);
       ring.rotation.x = Math.PI / 2;
-      const tail = mesh(new THREE.BoxGeometry(0.1, 0.32, 0.04), scarf, body, 0.09, torsoTop - 0.16, 0.17);
-      tail.rotation.z = 0.12;
+      ring.scale.set(1.1, 1, 1);
+      const tail = mesh(new THREE.BoxGeometry(0.075, 0.26, 0.022), scarf, body, 0.06, shoulderY - 0.1, 0.11);
+      tail.rotation.set(-0.12, 0, 0.1);
       break;
     }
     case 'backpack': {
-      const pack = mat(shade(style.secondaryColor, 0.8));
-      mesh(new THREE.BoxGeometry(0.36, 0.42, 0.17), pack, body, 0, hipY + 0.33, -0.24);
-      mesh(new THREE.BoxGeometry(0.28, 0.16, 0.05), mat(shade(style.secondaryColor, 0.6)), body, 0, hipY + 0.22, -0.34);
-      for (const side of [-1, 1]) {
-        mesh(new THREE.BoxGeometry(0.05, 0.5, 0.03), pack, body, side * 0.12, hipY + 0.32, 0.16);
-      }
+      const pack = fabric(shade(style.secondaryColor, 0.85));
+      const bag = mesh(new THREE.BoxGeometry(0.3, 0.38, 0.13), pack, body, 0, hipY + 0.28, -0.17);
+      bag.scale.set(1, 1, 1);
+      mesh(new THREE.BoxGeometry(0.22, 0.12, 0.05), fabric(shade(style.secondaryColor, 0.65)), body, 0, hipY + 0.17, -0.25);
+      for (const side of [-1, 1]) mesh(new THREE.BoxGeometry(0.035, 0.42, 0.015), pack, body, side * 0.1, hipY + 0.3, 0.11);
       break;
     }
   }
 
   // ── Poses ──
-  // Seated at the board. `reach` (0–1) stretches the reaching arm out over the board, so the
-  // hand is above `reachToX` (sideways, in the character's own metres); `cheer` (0–1) raises
-  // both arms.
+  // Seated at the board. `reach` (0–1) stretches the reaching arm out over the board so the hand
+  // is above `reachToX` (sideways, in the character's own metres); `grip` (0–1) cups the hand to
+  // hold seeds; `cheer` (0–1) raises both arms; `leanIn` scales how far the body tips forward
+  // when reaching (the player leans less, so their head doesn't block the camera).
   const SEAT_DROP = hipY - 0.46; // hips rest on a 0.46 m stool
-  const ARM_LEN = 0.62;
-  const shoulderX = shoulderR + 0.05;
+  const REACH = 0; // index of the sowing arm: the right hand (the model faces +z, so its right is -x)
+  const reachShoulderX = -shoulderX;
   let reachNow = 0;
   let cheerNow = 0;
-  let swingNow = 0.15;
-  // `leanIn` scales how far the body tips forward when reaching (the player leans less, so
-  // their head doesn't block the camera's view of the board).
-  function animate(dt, { reach = 0, reachToX = 0, cheer = 0, time = 0, leanIn = 1 } = {}) {
+  let gripNow = 0.3;
+  let swingNow = -0.1;
+  function animate(dt, { reach = 0, reachToX = 0, cheer = 0, time = 0, leanIn = 1, grip = 0 } = {}) {
     const k = Math.min(1, dt * 10);
     reachNow += (reach - reachNow) * k;
-    // sideways swing that puts the hand over reachToX (rotating about z moves the hand along x)
-    const swing = reach > 0 ? Math.asin(THREE.MathUtils.clamp((reachToX - shoulderX) / ARM_LEN, -0.95, 0.95)) : 0.15;
-    swingNow += (swing - swingNow) * Math.min(1, dt * 14);
     cheerNow += (cheer - cheerNow) * Math.min(1, dt * 6);
+    const wantGrip = grip > 0 ? grip : reach > 0 ? 0.15 : 0.35;
+    gripNow += (wantGrip - gripNow) * Math.min(1, dt * 12);
+    // rotating the shoulder about z moves the hand along x
+    const swing = reach > 0 ? Math.asin(THREE.MathUtils.clamp((reachToX - reachShoulderX) / 0.6, -0.95, 0.95)) : 0.07;
+    swingNow += (swing - swingNow) * Math.min(1, dt * 14);
+
     // Lean in from the hips: the body tips forward around the hip point, and the legs
     // counter-rotate so the feet stay on the floor.
-    const lean = 0.1 + reachNow * 0.47 * leanIn;
+    const lean = 0.08 + reachNow * 0.47 * leanIn;
     body.rotation.x = lean;
-    body.position.set(0, -SEAT_DROP + hipY * (1 - Math.cos(lean)) + Math.sin(time * 1.6) * 0.004, -hipY * Math.sin(lean));
-    for (let i = 0; i < 2; i++) {
-      legs[i].rotation.x = -1.5 - lean;
-      legs[i].rotation.z = (i ? 1 : -1) * 0.12; // knees a little apart
-      knees[i].rotation.x = 1.45;
-    }
+    body.position.set(0, -SEAT_DROP + hipY * (1 - Math.cos(lean)) + Math.sin(time * 1.6) * 0.003, -hipY * Math.sin(lean));
+    legs.forEach(({ hip, knee }, i) => {
+      hip.rotation.x = -Math.PI / 2 - lean;
+      hip.rotation.z = (i ? 1 : -1) * 0.08;
+      knee.rotation.x = Math.PI / 2 - 0.05;
+    });
+    head.rotation.x = 0.15 + reachNow * 0.05; // looking down at the board
+
+    // Arm angles are set in the world (forward of straight down). A forward lean swings a
+    // hanging arm backwards, so the lean is subtracted.
     const wave = Math.sin(time * 9) * 0.25 * cheerNow;
-    // Arm angles are set in the world: hands rest on the knees (0.65 rad forward of straight
-    // down) and reach out over the pits (0.95 rad) whatever the lean.
-    // (the body's forward lean swings a hanging arm backwards, so it's subtracted here)
-    const rest = -(0.65 + lean);
-    arms[0].rotation.x = rest * (1 - cheerNow) - 2.7 * cheerNow;
-    arms[0].rotation.z = -0.15 - 0.3 * cheerNow + wave;
-    const reachAngle = -((0.65 + 0.3 * reachNow) + lean);
-    arms[1].rotation.x = reachAngle * (1 - cheerNow) - 2.7 * cheerNow;
-    arms[1].rotation.z = swingNow * (1 - cheerNow) + 0.45 * cheerNow - wave;
+    arms.forEach(({ shoulder, elbow, wrist }, i) => {
+      const reaching = i === REACH ? reachNow : 0;
+      // resting: upper arm forward, forearm angled down so the hand lies on the thigh
+      const upper = 0.5 + (0.78 - 0.5) * reaching;
+      const bend = 0.62 + (0.2 - 0.62) * reaching;
+      shoulder.rotation.x = -(upper + lean) * (1 - cheerNow) - 2.9 * cheerNow;
+      elbow.rotation.x = -bend * (1 - cheerNow) - 0.35 * cheerNow;
+      // With the forearm forward the hand's palm side (+z) would face up, so the wrist turns
+      // it over (pronates): palms down on the thighs and over the board, thumbs inward.
+      wrist.rotation.y = Math.PI * (1 - cheerNow);
+      wrist.rotation.x = 0.25 * reaching - 0.12 * (1 - reaching);
+      const side = i ? 1 : -1;
+      const restZ = -side * 0.07; // elbows tucked so the hands sit on the thighs
+      shoulder.rotation.z = (i === REACH ? swingNow * reaching + restZ * (1 - reaching) : restZ) * (1 - cheerNow)
+        + side * 0.35 * cheerNow + wave * side;
+      curlHand(hands[i], i === REACH ? gripNow : 0.35 + cheerNow * 0.5);
+    });
   }
 
   function dispose() {
@@ -297,5 +423,5 @@ export function buildCharacter(rawStyle) {
   }
 
   animate(0);
-  return { root, body, headY, palm, animate, dispose, style };
+  return { root, body, head, headY, headR: R, palm: hands[REACH].palmPoint, animate, dispose, style };
 }

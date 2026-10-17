@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ayo — characters</title>
+<style>html,body{margin:0;height:100%;background:#cfc6b8;overflow:hidden}canvas{display:block}</style>
+<script type="importmap">{ "imports": { "three": "../vendor/three.module.min.js" } }</script>
+</head>
+<body>
+<!-- Dev page: seated characters in every hair, hat and accessory, plus a close-up of a hand.
+     ?pose=reach|cheer, ?view=back|close -->
+<script type="module">
+import * as THREE from 'three';
+import { buildCharacter } from '../src/character.js';
+
+const q = new URLSearchParams(location.search);
+const looks = [
+  { body: 'male', hair: 'short', hat: 'none', accessory: 'none', primaryColor: '#4b7bec', secondaryColor: '#2b2f4a', skinColor: '#8d5524', hairColor: '#17120f' },
+  { body: 'female', hair: 'afro', hat: 'none', accessory: 'earrings', primaryColor: '#a55eea', secondaryColor: '#0c6e5a', skinColor: '#5c3a21', hairColor: '#17120f' },
+  { body: 'female', hair: 'braids', hat: 'crown', accessory: 'earrings', primaryColor: '#e84393', secondaryColor: '#2d3436', skinColor: '#8d5524', hairColor: '#3b2314' },
+  { body: 'female', hair: 'bun', hat: 'none', accessory: 'glasses', primaryColor: '#00b894', secondaryColor: '#6c5ce7', skinColor: '#c68642', hairColor: '#2d1b10' },
+  { body: 'female', hair: 'ponytail', hat: 'cap', accessory: 'backpack', primaryColor: '#fdcb6e', secondaryColor: '#d63031', skinColor: '#e0ac69', hairColor: '#4a2c17' },
+  { body: 'male', hair: 'dreads', hat: 'beanie', accessory: 'scarf', primaryColor: '#e17055', secondaryColor: '#0984e3', skinColor: '#5c3a21', hairColor: '#0f0b08' },
+  { body: 'male', hair: 'bald', hat: 'tophat', accessory: 'beard', primaryColor: '#2d3436', secondaryColor: '#636e72', skinColor: '#8d5524', hairColor: '#17120f' },
+  { body: 'male', hair: 'afro', hat: 'cap', accessory: 'glasses', primaryColor: '#55efc4', secondaryColor: '#2b2f4a', skinColor: '#3d2314', hairColor: '#17120f' },
+];
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(devicePixelRatio);
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.shadowMap.enabled = true;
+document.body.append(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#cfc6b8');
+scene.add(new THREE.HemisphereLight('#ffffff', '#806a55', 1.4));
+const sun = new THREE.DirectionalLight('#fff2df', 2.6);
+sun.position.set(2, 4, 4);
+scene.add(sun);
+
+const people = looks.map((look, i) => {
+  const c = buildCharacter(look);
+  c.root.position.x = (i - (looks.length - 1) / 2) * 0.62;
+  c.root.rotation.y = q.get('view') === 'back' ? Math.PI : -0.25;
+  scene.add(c.root);
+  return c;
+});
+const pose = { reach: q.get('pose') === 'reach' ? 1 : 0, cheer: q.get('pose') === 'cheer' ? 1 : 0, reachToX: 0.0, grip: q.get('pose') === 'reach' ? 0.8 : 0 };
+for (let i = 0; i < 60; i++) people.forEach((c) => c.animate(1 / 30, { ...pose, time: i / 30 }));
+
+const camera = new THREE.PerspectiveCamera(30, innerWidth / innerHeight, 0.02, 50);
+if (q.get('view') === 'close') {
+  // close-up of the second character's hands and face
+  const target = people[1].head.getWorldPosition(new THREE.Vector3());
+  camera.position.set(target.x - 0.2, target.y - 0.15, target.z + 1.3);
+  camera.lookAt(target.x, target.y - 0.4, target.z);
+} else {
+  camera.position.set(0, 1.1, 6.6);
+  camera.lookAt(0, 0.75, 0);
+}
+renderer.render(scene, camera);
+</script>
+</body>
+</html>

@@ -38,15 +38,20 @@ const ELDER_STYLE = {
 };
 const baba = buildCharacter(ELDER_STYLE);
 {
-  // Baba's fila, tipped to one side
-  const fila = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.17, 0.215, 0.13, 24),
-    new THREE.MeshStandardMaterial({ color: '#2c3e6b', roughness: 0.95 }),
-  );
-  fila.position.set(0.02, baba.headY + 0.2, -0.02);
-  fila.rotation.z = -0.28;
-  fila.castShadow = true;
-  baba.body.add(fila);
+  // Baba's fila: a soft cloth cap, its top folded over to one side
+  const R = baba.headR;
+  const cloth = new THREE.MeshPhysicalMaterial({ color: '#2c3e6b', roughness: 0.9, sheen: 0.6, sheenColor: '#5b74b5' });
+  const fila = new THREE.Group();
+  const band = new THREE.Mesh(new THREE.CylinderGeometry(R * 0.98, R * 1.02, R * 0.75, 32), cloth);
+  const fold = new THREE.Mesh(new THREE.SphereGeometry(R * 1.0, 28, 14, 0, Math.PI * 2, 0, Math.PI / 2), cloth);
+  fold.position.set(R * 0.25, R * 0.3, 0);
+  fold.scale.set(1.15, 0.55, 1.0);
+  fold.rotation.z = -0.35;
+  fila.add(band, fold);
+  fila.position.set(0, R * 0.78, -R * 0.05);
+  fila.rotation.z = -0.12;
+  fila.traverse((o) => { o.castShadow = true; });
+  baba.head.add(fila);
 }
 baba.root.position.set(0, 0, -SEAT_Z);
 scene.add(baba.root);
@@ -344,6 +349,7 @@ async function animateMove(pit) {
   await Promise.all(hand.map((s, n) => fly(s, inHand(n).add(palmPos), 0.2, 0.03)));
   carry.palm = person.palm;
   carry.seeds = hand;
+  who.grip = 0.8; // cup the hand around the seeds
 
   // the hand moves along the pits, dropping one seed into each
   for (const target of result.path) {
@@ -356,6 +362,7 @@ async function animateMove(pit) {
   }
   await wait(280);
   carry.palm = null;
+  who.grip = 0;
   who.reach = 0;
 
   // captures fly into the mover's store
@@ -507,7 +514,9 @@ function placeCounts() {
   // speech bubble over the speaker
   const b = $('bubble');
   if (!b.hidden) {
-    const head = b.dataset.who === 'you' ? new THREE.Vector3(0, 1.42, SEAT_Z) : new THREE.Vector3(0, 1.55, -SEAT_Z);
+    const speaker = b.dataset.who === 'you' ? me : baba;
+    const head = speaker.head.getWorldPosition(new THREE.Vector3());
+    head.y += 0.22;
     head.project(camera);
     // keep the bubble on screen, below the scoreboard
     const bx = THREE.MathUtils.clamp((head.x * 0.5 + 0.5) * innerWidth, 140, innerWidth - 140);
