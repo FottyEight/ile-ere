@@ -212,7 +212,7 @@ export function createLudoTable(ctx) {
   function clearRings() { for (const r of rings) r.visible = false; }
 
   async function rollDie(colour, forced) {
-    ctx.sfx.pickup();
+    ctx.sfx.play('dice_roll');
     tumble = 0.6 / Math.min(ctx.speed, 3);
     const r = kid(colour);
     if (r) r.pose = { reach: 1, reachToX: 0 };
@@ -225,7 +225,6 @@ export function createLudoTable(ctx) {
     const v = result.events.find((e) => e.type === 'roll').value;
     tumble = 0;
     die.rotation.set(...DIE_UP[v]);
-    ctx.sfx.clack();
     focusPoint = die.position.clone();
     return { v, events: result.events };
   }
@@ -240,11 +239,11 @@ export function createLudoTable(ctx) {
           const pos = spotOf(e.colour, p, e.token);
           focusPoint = pos.clone();
           await ctx.fly(t, pos, 0.16, 0.025);
-          ctx.sfx.clack();
+          ctx.sfx.play('token_move', { volume: 0.8 });
         }
       }
       if (e.type === 'capture') {
-        ctx.sfx.capture();
+        ctx.sfx.play('piece_slide', { volume: 1.1, rate: 1.2 });
         ctx.teach('capture');
         const victim = kid(e.colour);
         const by = kid(e.by);

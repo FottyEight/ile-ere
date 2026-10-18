@@ -403,6 +403,10 @@ export const GUIDES = {
         heading: 'Music and sound',
         html: '<ul><li>Click or tap <b>Baba’s radio</b> to switch the music on or off.</li><li>The 🔊 button, or <kbd>M</kbd>, turns all sound on or off.</li><li>The <b>?</b> button opens this guide.</li></ul>',
       },
+      {
+        heading: 'Credits',
+        html: '<p>Music on Baba’s radio: <b>“Imela”</b> (album <i>Ekene</i>) and <b>“Egwu Nwa”</b> (album <i>Egwu Nwa</i>) by <b>Ugo Mbaise</b>, from the <a href="https://freemusicarchive.org/music/ugo-mbaise/" target="_blank" rel="noopener">Free Music Archive</a>, licensed under <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>. Excerpted and level-adjusted.</p><p>Ayo seed sounds: “singledrop1–3” and “clatter1” by <b>jaybatzner</b> on <a href="https://freesound.org/people/jaybatzner/" target="_blank" rel="noopener">Freesound</a>, <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>, trimmed and re-encoded.</p><p>Other sounds are CC0, with thanks to Kenney and the Freesound recordists (including jehoshaphatia and jilla2021 for the Lagos street recordings). Full list: <code>assets/audio/CREDITS.md</code>. Pictures: Poly Haven (CC0). Made with three.js.</p>',
+      },
     ],
   },
 

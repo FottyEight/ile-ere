@@ -9,7 +9,7 @@ import { createDraughtsTable } from './draughtsTable.js';
 import { createLudoTable } from './ludoTable.js';
 import { newGame, play, legalMoves, chooseMove } from './ayo.js';
 import { whoami, saveRun, leaderboard, signIn, onStartNg, cameAsGuest, FALLBACK_GUEST } from './startng.js';
-import { unlock, sfx, toggleMute, isMuted, setAmbience, toggleRadio, radioPlaying, okada, cluck } from './sound.js';
+import { unlock, sfx, play as playSound, toggleMute, isMuted, setAmbience, toggleRadio, radioPlaying, okada, cluck, rooster, preload, setListener, setRadioPosition, speak, setVoice, audioStats } from './sound.js';
 import { makeGrid, findPath, createPathLine, makeSign, createMinimap } from './nav.js';
 import { GUIDES, CONTROLS, LESSONS } from './guides.js';
 
@@ -53,6 +53,7 @@ $('lead-time').textContent = {
 }[timeOfDay];
 if (timeOfDay === 'night') chickens.forEach((c) => { c.visible = false; }); // gone to roost
 setRadioLight(radioPlaying());
+setRadioPosition(radio.getWorldPosition(new THREE.Vector3()));
 
 // ── People at the board ──
 const ELDER_STYLE = {
@@ -279,10 +280,21 @@ function say(text, who = 'baba', ms = 2600) {
   b.dataset.who = who;
   b.hidden = false;
   talkUntil = performance.now() + Math.min(ms, 400 + text.length * 55); // roughly the time to say it
+  voice(who, text, Math.min(ms, 400 + text.length * 55) / 1000);
   clearTimeout(bubbleTimer);
   bubbleTimer = setTimeout(() => { b.hidden = true; }, ms / Math.sqrt(SPEED));
 }
 const pickLine = (lines) => lines[Math.floor(Math.random() * lines.length)];
+// whoever is talking, heard from where their head is
+function speakerHead(who) {
+  if (who === 'baba') return baba.head.getWorldPosition(new THREE.Vector3());
+  if (who === 'you') return me ? me.head.getWorldPosition(new THREE.Vector3()) : walker.pos.clone().setY(1.5);
+  return regulars.find((r) => r.name === who)?.c.head.getWorldPosition(new THREE.Vector3()) ?? null;
+}
+function voice(who, text, seconds) {
+  if (who === 'you' && me) setVoice('you', { pitch: me.style?.body === 'female' ? 210 : 132 });
+  speak(who, text, speakerHead(who), seconds);
+}
 // whose speech bubble is showing, so their mouth moves (for about as long as it takes to say it)
 let talkUntil = 0;
 const talkingNow = (who) => (!$('bubble').hidden && $('bubble').dataset.who === who && performance.now() < talkUntil)
@@ -323,6 +335,7 @@ function nextTip() {
   // long enough to read, then the next line (the last one lingers a little)
   const ms = THREE.MathUtils.clamp(line.length * 60, 3200, 9000);
   teaching.talkUntil = performance.now() + Math.min(ms, 400 + line.length * 55);
+  voice(teaching.who, line, Math.min(ms, 400 + line.length * 55) / 1000);
   teaching.timer = setTimeout(nextTip, ms);
 }
 function stopTeaching() {
@@ -661,6 +674,7 @@ async function renderBoard(list = $('board'), note = $('board-note')) {
 
 $('play').onclick = startGame;
 $('again').onclick = () => { pose.me.cheer = pose.baba.cheer = 0; setMode('menu'); renderLevels(); renderRecord(); };
+document.addEventListener('click', (e) => { if (e.target.closest?.('button')) { unlock(); sfx.click(); } });
 $('mute').textContent = isMuted() ? '\u{1F507}' : '\u{1F50A}';
 $('mute').onclick = () => { unlock(); $('mute').textContent = toggleMute() ? '\u{1F507}' : '\u{1F50A}'; };
 setUpSeeds();
@@ -1020,6 +1034,12 @@ function stepWalker(dt) {
     walker.pos.x += n.x * walker.speed * dt;
     walker.pos.z += n.y * walker.speed * dt;
     collide(walker.pos);
+    walker.stride = (walker.stride ?? 0) + walker.pos.distanceTo(before);
+    if (walker.stride > (walker.speed > 2 ? 0.8 : 0.62)) {
+      walker.stride = 0;
+      const tiles = walker.pos.z < VERANDAH.front;
+      playSound(tiles ? 'step_tile' : 'step_concrete', { pos: { x: walker.pos.x, y: 0.05, z: walker.pos.z }, volume: tiles ? 0.5 : 0.65, vary: 0.08 });
+    }
     // stuck against something on the way to a tapped point: give up
     if (walker.target && walker.pos.distanceTo(before) < walker.speed * dt * 0.2) {
       walker.stuck = (walker.stuck ?? 0) + dt;
@@ -1102,6 +1122,7 @@ function stepSitting(dt) {
     walker.seat = null;
     walker.seated = true;
     atStation = st.station;
+    if (!atStation.standing) sfx.sit(atStation.seat);
     pose.me.cheer = 0;
     if (atStation.id === 'ayo') {
       setMode('menu');
@@ -1118,6 +1139,7 @@ function standUp() {
   const s = atStation ?? stationById('ayo');
   if (activeTable) { activeTable.stop(); activeTable = null; }
   stopTeaching();
+  if (walker.seated && !s.standing) sfx.cloth(s.seat);
   walker.seated = false;
   atStation = null;
   walker.pos.copy(s.approach);
@@ -1144,6 +1166,12 @@ let activeTable = null;
 const TABLE_LEVELS = ['Easy', 'Normal', 'Hard'];
 let tableLevel = 1;
 
+// a table's sounds play from the table: sfx.play('card_slap'), or sfx.play('ball_hit', { pos })
+function tableSfx(id) {
+  const t = house.tables[id];
+  const at = { x: t.center.x, y: (t.top ?? 0.8) + 0.05, z: t.center.z };
+  return { ...sfx, play: (name, opts = {}) => sfx.play(name, { pos: at, ...opts }) };
+}
 function tableContext(id) {
   return {
     THREE, scene, camera, raycaster, pointer,
@@ -1154,7 +1182,7 @@ function tableContext(id) {
     pose, // pose.me: your reach and grip
     get speed() { return SPEED; },
     get time() { return time; },
-    sfx, say, toast, wait, fly, pickLine,
+    sfx: tableSfx(id), say, toast, wait, fly, pickLine,
     // the host explains this, if it's your first game here (keys from LESSONS in guides.js)
     teach: (key) => { if (teaching.id === id) teach(key); },
     turn: (text) => { $('table-turn').textContent = text; },
@@ -1625,7 +1653,7 @@ function stepChickens(dt) {
     if (d < 0.05) {
       u.wait = 1 + Math.random() * 3;
       u.peck = 0;
-      if (Math.random() < 0.3) cluck();
+      if (Math.random() < 0.3) cluck(c.position);
       continue;
     }
     const heading = Math.atan2(to.x, to.z);
@@ -1654,11 +1682,44 @@ const GREETING = {
   night: ['A neighbour passing by: “Baba, ẹ kú alẹ́ o!” (good night)', 'Ẹ kú alẹ́ o! Ó dàárọ̀.'],
 };
 let okadaIn = 18 + Math.random() * 20;
+let roosterIn = 30 + Math.random() * 60;
+// The regulars play on among themselves: their sounds (and a bit of chat) come from their tables,
+// so the joint sounds busy and the nearer tables are louder.
+const TABLE_LIFE = {
+  draughts: [['piece_place', 0.8], ['piece_place', 0.8], ['piece_slide', 0.7]],
+  whot: [['card_slap', 0.9], ['card_slap', 0.9], ['card_draw', 0.7], ['card_shuffle', 0.6]],
+  ludo: [['dice_roll', 0.8], ['token_move', 0.8]],
+  snooker: [['cue_strike', 0.7], ['ball_hit', 0.8], ['ball_pocket', 0.6]],
+  foosball: [['foos_kick', 0.8], ['foos_rattle', 0.6]],
+};
+const CHATTER = ['Ehen, na so!', 'Wait, wait first.', 'Oya now, play!', 'Haba! You see am?', 'I don tell you before.', 'This one na wa o.', 'Your turn!', 'Hmm. Let me think.'];
+const CHAT_VOICE = { draughts: ['Tunde'], whot: ['Iya Bisi', 'Uncle Femi', 'Mama Ngozi'], ludo: ['Kemi', 'Tobi'], snooker: ['Emeka'], foosball: ['Chidi'] };
+let lifeIn = 3;
+function tableLife(dt) {
+  lifeIn -= dt;
+  if (lifeIn > 0) return;
+  lifeIn = 1.5 + Math.random() * 3.5;
+  const ids = Object.keys(TABLE_LIFE).filter((id) => id !== atStation?.id);
+  const id = ids[Math.floor(Math.random() * ids.length)];
+  const t = house.tables[id];
+  const at = { x: t.center.x, y: (t.top ?? 0.8) + 0.05, z: t.center.z };
+  const [name, volume] = TABLE_LIFE[id][Math.floor(Math.random() * TABLE_LIFE[id].length)];
+  playSound(name, { pos: at, volume: volume * 0.8 });
+  if (Math.random() < 0.18 && $('bubble').hidden) {
+    const who = pickLine(CHAT_VOICE[id]);
+    const line = pickLine(CHATTER);
+    const head = speakerHead(who);
+    if (head) speak(who, line, head, 0.4 + line.length * 0.05);
+  }
+}
 let neighbourIn = 45 + Math.random() * 45;
 function stepStreet(dt) {
   if (mode === 'cover') return;
   okadaIn -= dt;
   if (okadaIn <= 0) { okada(); okadaIn = 25 + Math.random() * 35; }
+  roosterIn -= dt;
+  if (roosterIn <= 0) { if (timeOfDay === 'day') rooster(); roosterIn = 80 + Math.random() * 120; }
+  tableLife(dt);
   neighbourIn -= dt;
   if (neighbourIn <= 0 && !busy && $('bubble').hidden && !lesson.active) {
     neighbourIn = 60 + Math.random() * 60;
@@ -1786,6 +1847,8 @@ function frame() {
   camLook.lerp(wantLook, ck);
   camera.position.copy(camPos);
   camera.lookAt(camLook);
+  camera.updateMatrixWorld();
+  setListener(camera);
   // hide a lantern when the camera is right up against it
   for (const o of house.occluders) o.visible = o.position.distanceTo(camPos) > 0.8;
   // while you play at a table, don't let your own character block the view of the game
@@ -1882,6 +1945,7 @@ if (cover) {
 await Promise.race([renderer.compileAsync(scene, camera).catch(() => {}), new Promise((r) => setTimeout(r, 10000))]);
 $('loading').hidden = true;
 markReady();
+preload();
 requestAnimationFrame(frame);
 
 if (params.has('debug')) {
@@ -1909,6 +1973,9 @@ if (params.has('debug')) {
     standUp,
     regulars,
     get activeTable() { return activeTable; },
+    audioStats,
+    say,
+    toggleRadio,
     tableGames,
     // the active table's focus point on screen, for tests
     activeFocus: () => {

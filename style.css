@@ -74,6 +74,8 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .guide-body p, .guide-body li { color: var(--dim); line-height: 1.5; font-size: 14px; }
 .guide-body ul { padding-left: 20px; margin: 6px 0; }
 .guide-body b { color: var(--ink); }
+.guide-body a { color: var(--gold); }
+.guide-body code { font-size: 12px; color: var(--ink); }
 .guide-body svg { display: block; width: 100%; height: auto; margin: 8px 0; border-radius: 10px; }
 /* the host's lesson, under the scoreboard */
 .tip { position: absolute; top: 84px; left: 50%; transform: translateX(-50%); width: min(460px, calc(100vw - 32px)); pointer-events: auto;

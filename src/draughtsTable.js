@@ -133,7 +133,7 @@ export function createDraughtsTable(ctx) {
       const dest = posOf(to);
       const jump = move.captures.length > 0;
       await ctx.fly(g, dest, jump ? 0.34 : 0.28, jump ? 0.05 : 0.02);
-      ctx.sfx.clack();
+      ctx.sfx.play('piece_place');
       focusPoint = dest;
     }
     pieces.set(move.to, g);
@@ -148,7 +148,7 @@ export function createDraughtsTable(ctx) {
       k++;
     }
     if (move.crowned) addCrown(g, side);
-    if (move.captures.length) ctx.sfx.capture();
+    if (move.captures.length) ctx.sfx.play('piece_slide', { volume: 1.1 });
   }
 
   async function yourMove(move) {

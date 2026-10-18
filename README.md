@@ -75,3 +75,12 @@ Locally there's no start.ng player, so you play as a guest; add `?style={"hair":
 ## Credits
 
 Sky lighting (`balcony`) and wood, tile and plaster textures from [Poly Haven](https://polyhaven.com), CC0. The textures are re-encoded as WebP and the sky halved to 512×256 to keep the whole game around 2.3 MB.
+
+## Sound credits
+
+Recorded sounds and music live in `assets/audio/` (full per-file list in `assets/audio/CREDITS.md`). Everything is CC0 except:
+
+- "Imela" (album "Ekene") and "Egwu Nwa" (album "Egwu Nwa") by Ugo Mbaise, from the Free Music Archive (https://freemusicarchive.org/music/ugo-mbaise/), licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/). Excerpted, faded and level-adjusted.
+- "singledrop1.aif", "singledrop2.aif", "singledrop3.aif" and "clatter1.aif" by jaybatzner on Freesound (https://freesound.org/people/jaybatzner/), licensed under CC BY 4.0. Trimmed, normalised and re-encoded.
+
+The voices are made up on the fly (a "babble" that follows each line's vowels), not recordings.

@@ -169,9 +169,9 @@ export function createSnookerTable(ctx) {
     cue.position.copy(back);
     await ctx.wait(mover === 1 ? 500 : 60);
     await ctx.fly(cue, world(cb.x, cb.z, Y + 0.012).addScaledVector(dir, -R - 0.002), 0.08, 0);
-    ctx.sfx.clack();
+    ctx.sfx.play('cue_strike', { volume: 0.5 + shot.power * 0.6 });
     const result = S.takeShot(state, shot);
-    replay = { frames: result.frames, t: 0, potted: new Set(), result, mover };
+    replay = { frames: result.frames, t: 0, potted: new Set(), result, mover, hits: result.events.hits.slice(), cushions: result.events.cushions.slice(), lastClick: -1 };
     aimLine.visible = ghost.visible = false;
   }
 
@@ -306,7 +306,16 @@ export function createSnookerTable(ctx) {
         const f = replay.frames[i];
         drawBalls(f.balls);
         for (const b of f.balls) {
-          if (b.potted && !replay.potted.has(b.id)) { replay.potted.add(b.id); ctx.sfx.capture(); }
+          if (b.potted && !replay.potted.has(b.id)) { replay.potted.add(b.id); ctx.sfx.play('ball_pocket'); }
+        }
+        // balls meeting and hitting the cushions, as the replay reaches them (a few at most at once)
+        while (replay.hits.length && replay.hits[0].t <= f.t) {
+          const h = replay.hits.shift();
+          if (h.t - replay.lastClick > 0.03) { replay.lastClick = h.t; ctx.sfx.play('ball_hit', { volume: Math.min(1, 0.25 + h.v * 0.35), fallback: false }); }
+        }
+        while (replay.cushions.length && replay.cushions[0].t <= f.t) {
+          const h = replay.cushions.shift();
+          if (h.t - replay.lastClick > 0.03) { replay.lastClick = h.t; ctx.sfx.play('cushion', { volume: 0.5, fallback: false }); }
         }
         const cb = f.balls.find((b) => b.id === 'cue');
         if (cb && !cb.potted) focusPoint = world(cb.x, cb.z);

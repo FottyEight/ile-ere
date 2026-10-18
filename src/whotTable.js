@@ -230,7 +230,7 @@ export function createWhotTable(ctx) {
         const r = regular(e.player);
         if (r) r.pose = { reach: 1, reachToX: 0 };
         if (e.player === 0) { ctx.pose.me.reach = 1; ctx.pose.me.reachToX = 0; }
-        ctx.sfx.clack();
+        ctx.sfx.play('card_slap');
         if (e.card.number === 2) { shout(e.player, SHOUT.two); ctx.teach('pickTwo'); }
         else if (e.card.number === 5) { shout(e.player, SHOUT.three); ctx.teach('pickThree'); }
       }
@@ -238,7 +238,7 @@ export function createWhotTable(ctx) {
       if (e.type === 'suspended') { shout(mover, SHOUT.suspended); regular(e.player)?.c.gesture('shake', 1.2); ctx.teach('suspension'); }
       if (e.type === 'generalMarket') { shout(e.player, SHOUT.general); ctx.teach('generalMarket'); }
       if (e.type === 'call') { ctx.say(`I need ${SHAPE_WORD[e.shape]}!`, mover === 0 ? 'you' : NAMES[mover], 2000); ctx.teach('whot'); }
-      if (e.type === 'draw') { focusPoint = marketPos.clone(); ctx.sfx.pickup(); }
+      if (e.type === 'draw') { focusPoint = marketPos.clone(); ctx.sfx.play('card_draw'); }
       if (e.type === 'reshuffle') ctx.toast('The market is finished. The pile is shuffled back in.', 2200);
     }
     await layout();
@@ -309,7 +309,8 @@ export function createWhotTable(ctx) {
       state = W.newGame();
       // gather everything into the market, then deal
       for (const g of cards.values()) place(g, marketPos, 0.12, false, 0, true);
-      ctx.sfx.pickup();
+      ctx.sfx.play('card_shuffle', { volume: 0.8 });
+      for (let i = 0; i < 6; i++) setTimeout(() => ctx.sfx.play('card_deal', { volume: 0.6, fallback: false }), 900 + i * 160);
       await layout();
       busy = false;
       ctx.say(ctx.pickLine(['Cards don share. You start!', 'Oya, you first.']), 'Iya Bisi', 2000);

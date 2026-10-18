@@ -139,18 +139,18 @@ export function createFoosballTable(ctx) {
       computerControl(match, 1, level, dt, ai);
       const events = step(match, dt);
       for (const e of events) {
-        if (e.type === 'kick') ctx.sfx.clack();
+        if (e.type === 'kick') ctx.sfx.play('foos_kick');
         if (e.type === 'goal') {
           hud();
           const chidi = host();
+          ctx.sfx.play('foos_goal');
           if (e.team === 0) {
-            ctx.sfx.capture();
+            ctx.sfx.play('goal_cheer', { volume: 0.55, fallback: false });
             chidi?.c.gesture('shake', 1.4);
             ctx.me()?.gesture('nod', 1);
             ctx.turn('GOAL! You scored.');
             ctx.say(ctx.pickLine(['Ehn! Lucky shot.', 'Hmm, I wasn’t ready.', 'Okay, okay. Again!']), 'Chidi', 2200);
           } else {
-            ctx.sfx.clack();
             chidi?.c.gesture('laugh', 1.8);
             ctx.turn('Chidi scores.');
             ctx.say(ctx.pickLine(['GOOOAL! Haha!', 'You see am? Messi!', 'Na so e be!']), 'Chidi', 2200);

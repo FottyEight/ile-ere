@@ -236,6 +236,7 @@ function collide(a, b, h, ctx) {
         cue.vz += spin.vz * k;
       }
       ctx.events.contacts++;
+      ctx.events.hits.push({ t: ctx.t, v: -vn }); // for the click of balls meeting
     }
     a.x += a.vx * s; a.z += a.vz * s;
     b.x += b.vx * s; b.z += b.vz * s;
@@ -321,7 +322,7 @@ const snapshot = (t, bodies) => ({ t, balls: bodies.map(({ id, x, z, potted }) =
 
 // Runs a shot to rest. Physics only, no rules. Returns
 //   frames: [{ t, balls: [{ id, x, z, potted }] }] at 60 fps for animation,
-//   events: { firstHit, cushions: [{ id, t }], potted: [{ id, pocket, t }], cuePotted, contacts },
+//   events: { firstHit, cushions: [{ id, t }], potted: [{ id, pocket, t }], cuePotted, contacts, hits: [{ t, v }] },
 //   balls: where everything ended up, time: seconds until rest.
 // `options` is for tools and tests: { dt, record: false to skip frames, onStep(t, bodies) }.
 export function simulate(s, shot, { dt = DT, record = true, onStep } = {}) {
@@ -331,7 +332,7 @@ export function simulate(s, shot, { dt = DT, record = true, onStep } = {}) {
   const v = Math.max(0, Math.min(1, shot.power)) * MAX_SPEED;
   cue.vx = Math.cos(shot.angle) * v;
   cue.vz = Math.sin(shot.angle) * v;
-  const events = { firstHit: null, cushions: [], potted: [], cuePotted: false, contacts: 0 };
+  const events = { firstHit: null, cushions: [], potted: [], cuePotted: false, contacts: 0, hits: [] };
   const ctx = { events, t: 0, spin: Math.max(-1, Math.min(1, shot.spin || 0)), cueTravel: 0 };
   const every = Math.max(1, Math.round(1 / 60 / dt));
   const frames = record ? [snapshot(0, bodies)] : [];
