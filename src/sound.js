@@ -71,7 +71,7 @@ export function unlock() {
   meter.fftSize = 2048;
   limit.connect(meter);
   decodeAll().then(() => { startAmbience(); });
-  if (radioWanted) startRadio();
+  if (radioWanted && !inGame) startRadio();
 }
 
 // ── Where you're listening from: the camera ──
@@ -184,7 +184,11 @@ function startAmbience() {
 }
 
 // ── The radio: real highlife through a small speaker, by the wall ──
-let radioWanted = true;
+// Off until you switch it on (tap the radio); it goes quiet while you play a game and comes back
+// when you get up.
+let radioWanted = false;
+try { radioWanted = localStorage.getItem('joint-radio') === '1'; } catch { /* storage blocked */ }
+let inGame = false;
 let radioOn = false;
 let radioPos = { x: -2.75, y: 0.6, z: -1.55 };
 let radioOut = null; // the radio's volume (ducks while people talk)
@@ -234,19 +238,29 @@ async function startRadio() {
   play('radio_static', { pos: radioPos, volume: 0.35, duration: 0.5 });
   playSong();
 }
-function stopRadio() {
+function stopRadio(fade = false) {
   if (!radioOn) return;
   radioOn = false;
-  play('radio_static', { pos: radioPos, volume: 0.3, duration: 0.25 });
-  radioOut.gain.setTargetAtTime(0, ctx.currentTime, 0.05);
+  if (!fade) play('radio_static', { pos: radioPos, volume: 0.3, duration: 0.25 });
+  radioOut.gain.cancelScheduledValues(ctx.currentTime);
+  radioOut.gain.setTargetAtTime(0, ctx.currentTime, fade ? 0.6 : 0.05);
   const src = radioSrc;
   radioSrc = null;
-  try { src?.stop(ctx.currentTime + 0.3); } catch { /* not started yet */ }
+  try { src?.stop(ctx.currentTime + (fade ? 3 : 0.3)); } catch { /* not started yet */ }
 }
 export function toggleRadio() {
   radioWanted = !radioWanted;
-  if (radioWanted) startRadio(); else stopRadio();
+  try { localStorage.setItem('joint-radio', radioWanted ? '1' : '0'); } catch { /* storage blocked */ }
+  if (radioWanted && !inGame) startRadio(); else stopRadio();
   return radioWanted;
+}
+// a game has started (true) or you've got up (false): the music fades out, then back in
+export function setInGame(yes) {
+  if (yes === inGame) return;
+  inGame = yes;
+  if (!ctx) return;
+  if (yes) stopRadio(true);
+  else if (radioWanted) startRadio();
 }
 export const radioPlaying = () => radioWanted;
 // the radio dips while someone talks, then comes back up
@@ -410,6 +424,25 @@ function bell(freq, at = 0, volume = 0.18, length = 0.5) {
   o.start(t);
   o.stop(t + length);
 }
+// a soft two-note chime, like a thumb piano, for "your turn"
+function chime(notes, volume = 0.07) {
+  if (!ctx || muted) return;
+  for (const [freq, at] of notes) {
+    const t = ctx.currentTime + at;
+    for (const [mult, v] of [[1, 1], [3.01, 0.12]]) {
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = 'sine';
+      o.frequency.value = freq * mult;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(volume * v, t + 0.006);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + (mult === 1 ? 1.1 : 0.3));
+      o.connect(g).connect(master);
+      o.start(t);
+      o.stop(t + 1.2);
+    }
+  }
+}
 function synthOkada() {
   if (!ctx) return;
   const t = ctx.currentTime;
@@ -438,6 +471,7 @@ export const sfx = {
   win: () => play('win', { volume: 0.7, vary: 0 }) || [523, 659, 784, 1046].forEach((f, i) => bell(f, i * 0.13, 0.15, 0.7)),
   lose: () => play('lose', { volume: 0.7, vary: 0 }) || [440, 392, 330].forEach((f, i) => bell(f, i * 0.18, 0.12, 0.6)),
   click: () => play('ui_click', { volume: 0.5 }),
+  yourTurn: () => chime([[784, 0], [1175, 0.11]]),
   pop: () => play('ui_pop', { volume: 0.5 }),
   sit: (pos) => play('stool_sit', { pos, volume: 0.6 }),
   cloth: (pos) => play('cloth', { pos, volume: 0.5 }),

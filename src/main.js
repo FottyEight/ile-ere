@@ -9,7 +9,7 @@ import { createDraughtsTable } from './draughtsTable.js';
 import { createLudoTable } from './ludoTable.js';
 import { newGame, play, legalMoves, chooseMove } from './ayo.js';
 import { whoami, saveRun, leaderboard, signIn, onStartNg, cameAsGuest, FALLBACK_GUEST } from './startng.js';
-import { unlock, sfx, play as playSound, toggleMute, isMuted, setAmbience, toggleRadio, radioPlaying, okada, cluck, rooster, preload, setListener, setRadioPosition, speak, setVoice, audioStats } from './sound.js';
+import { unlock, sfx, play as playSound, setInGame, toggleMute, isMuted, setAmbience, toggleRadio, radioPlaying, okada, cluck, rooster, preload, setListener, setRadioPosition, speak, setVoice, audioStats } from './sound.js';
 import { makeGrid, findPath, createPathLine, makeSign, createMinimap } from './nav.js';
 import { GUIDES, CONTROLS, LESSONS } from './guides.js';
 
@@ -230,6 +230,7 @@ function setMode(next) {
   $('table-menu').hidden = next !== 'tmenu';
   $('table-over').hidden = next !== 'tover';
   $('table-hud').hidden = next !== 'tplay' && next !== 'tover';
+  setInGame(next === 'playing' || next === 'tplay' || next === 'over' || next === 'tover');
   if (next !== 'tplay') $('table-actions').replaceChildren();
 }
 const atTable = () => mode === 'tmenu' || mode === 'tplay' || mode === 'tover';
@@ -268,7 +269,15 @@ function updateScores() {
   $('level-badge').textContent = LEVELS[level];
 }
 
+// a soft chime when it becomes your turn (at any table)
+let wasMyTurn = false;
+function chimeIfMine(text) {
+  const mine = /^Your (turn|move|shot)/.test(text);
+  if (mine && !wasMyTurn) sfx.yourTurn();
+  wasMyTurn = mine;
+}
 function setTurnText(text) {
+  chimeIfMine(text);
   $('turn').textContent = text;
 }
 
@@ -1185,7 +1194,7 @@ function tableContext(id) {
     sfx: tableSfx(id), say, toast, wait, fly, pickLine,
     // the host explains this, if it's your first game here (keys from LESSONS in guides.js)
     teach: (key) => { if (teaching.id === id) teach(key); },
-    turn: (text) => { $('table-turn').textContent = text; },
+    turn: (text) => { chimeIfMine(text); $('table-turn').textContent = text; },
     hint: (text) => { $('table-hint').textContent = text; },
     // seats: [{ name, value, active }]
     score: (seats) => {

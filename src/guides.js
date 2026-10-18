@@ -401,7 +401,7 @@ export const GUIDES = {
       },
       {
         heading: 'Music and sound',
-        html: '<ul><li>Click or tap <b>Baba’s radio</b> to switch the music on or off.</li><li>The 🔊 button, or <kbd>M</kbd>, turns all sound on or off.</li><li>The <b>?</b> button opens this guide.</li></ul>',
+        html: '<ul><li>Click or tap <b>Baba’s radio</b> (by the wall, next to the Ayo table) to switch the music on or off. It’s off to begin with, and it goes quiet while you play a game.</li><li>A soft chime tells you when it’s your turn.</li><li>The 🔊 button, or <kbd>M</kbd>, turns all sound on or off.</li><li>The <b>?</b> button opens this guide.</li></ul>',
       },
       {
         heading: 'Credits',
