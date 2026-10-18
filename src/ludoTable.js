@@ -245,6 +245,7 @@ export function createLudoTable(ctx) {
       }
       if (e.type === 'capture') {
         ctx.sfx.capture();
+        ctx.teach('capture');
         const victim = kid(e.colour);
         const by = kid(e.by);
         if (e.colour === 0) { by?.c.gesture('laugh', 1.6); ctx.say(ctx.pickLine(['Go back home! Haha!', 'I don chop you!', 'Sorry o! (I’m not sorry)']), PLAYERS[e.by], 2200); }
@@ -252,6 +253,12 @@ export function createLudoTable(ctx) {
         else { by?.c.gesture('laugh', 1.4); victim?.c.gesture('shake', 1.2); }
       }
       if (e.type === 'finish' && e.colour !== 0) kid(e.colour)?.c.gesture('nod', 1.2);
+    }
+    // where your tokens ended up: a safe square or your home column is worth explaining
+    if (choice !== undefined && state.turn === 0) {
+      const mine = result.state.tokens[0];
+      if (mine.some((p) => p >= 51 && p < 56)) ctx.teach('homeColumn');
+      else if (mine.some((p) => p >= 0 && p <= 50 && L.isSafe(L.trackIndex(0, p)))) ctx.teach('safe');
     }
     state = result.state;
     await layout(state, false);
@@ -317,13 +324,16 @@ export function createLudoTable(ctx) {
     const { v, events } = await rollDie(0);
     busy = false;
     if (state.phase !== 'move') {
+      if (v !== 6 && state.tokens[0].every((p) => p < 0 || p === 56)) ctx.teach('needSix');
       ctx.turn(events.some((e) => e.type === 'forfeit') ? 'Three sixes in a row: your turn is lost' : `You rolled ${v}: no move`);
       await ctx.wait(1100);
       next();
       return;
     }
     const moves = L.legalMoves(state);
+    if (v === 6) ctx.teach('rolledSix');
     if (moves.length === 1) { ctx.turn(`You rolled ${v}`); await ctx.wait(350); return yourPick(moves[0].token); }
+    ctx.teach('pickToken');
     ctx.turn(`You rolled ${v}: pick a token to move`);
     ctx.hint('Tap one of your glowing tokens');
     moves.forEach((m, i) => {
@@ -350,10 +360,10 @@ export function createLudoTable(ctx) {
     lead: 'Kemi and Tobi have been waiting for a third player. You’re red; get all four of your tokens home before they do.',
     levelLabel: 'How clever are the kids?',
     rules: [
-      'Roll a <b>6</b> to bring a token out. A 6 also gives you another roll.',
+      'Roll a <b>6</b> to bring a token out. A 6 also gives you another roll, but <b>three 6s in a row</b> loses your turn.',
       'Move a token by the number on the die. Land on a single enemy token to send it home (and roll again).',
-      'Stars and coloured start squares are safe. Two tokens of one colour together form a block nobody can pass.',
-      'Go round the board and up your coloured column; you need the exact number to finish. First with all four home wins.',
+      'Stars and coloured start squares are safe. Two tokens of one colour together form a <b>block</b> nobody can pass or land on, even on a start square.',
+      'Go round the board and up your coloured column; you need the exact number to finish. Getting a token home earns another roll. First with all four home wins.',
     ],
     greetings: ['Yay, you came! Sit there, you’re red.', 'Play with us! Please!', 'Ludo! I’m going to win!'],
     view: { target: new THREE.Vector3(c.x, info.top + 0.02, c.z + 0.05), yaw: 0, pitch: 1.05, dist: 1.15 },

@@ -34,7 +34,8 @@
 </div>
 
 <div class="corner">
-  <button class="round" id="rules-open" type="button" aria-label="How to play">?</button>
+  <button class="round" id="tables-open" type="button" aria-label="Tables" title="Tables">☰</button>
+  <button class="round" id="rules-open" type="button" aria-label="How to play" title="How to play">?</button>
   <button class="round" id="mute" type="button" aria-label="Sound on or off">🔊</button>
 </div>
 
@@ -50,8 +51,13 @@
 </div>
 
 <div class="walk-hud" id="walk-hud" hidden>
+  <div class="minimap" id="minimap">
+    <canvas id="minimap-canvas" width="220" height="150" aria-label="Map of the joint: tap a table to go there"></canvas>
+    <button class="minimap-toggle" id="minimap-toggle" type="button" aria-label="Show or hide the map">Map</button>
+  </div>
+  <button class="tour-end" id="tour-end" type="button" hidden>End the tour</button>
   <button class="sit" id="sit-prompt" type="button" hidden></button>
-  <p class="hint">WASD or arrows to walk (Shift to hurry) · drag to look · tap the floor or a table to go there</p>
+  <p class="hint" id="walk-hint">WASD or arrows to walk (Shift to hurry) · drag to look · tap the floor or a table to go there</p>
 </div>
 
 <section class="screen" id="menu">
@@ -79,6 +85,7 @@
     </div>
     <button class="big" id="play" type="button">Play Ayo</button>
     <button class="secondary wide" id="stand-up" type="button">Stand up and look around</button>
+    <button class="link another" data-another type="button">Another table…</button>
     <p class="note" id="menu-signin-note">Playing as a guest. <button class="link" id="menu-signin" type="button">Sign in with start.ng</button> to play as your own character and save your win streak.</p>
   </div>
 </section>
@@ -104,6 +111,7 @@
     <p class="note" id="board-note"></p>
     <button class="big" id="again" type="button">Play again</button>
     <button class="secondary wide" id="over-leave" type="button">Leave the table</button>
+    <button class="link another" data-another type="button">Another table…</button>
   </div>
 </section>
 
@@ -113,6 +121,11 @@
   <div class="table-actions" id="table-actions"></div>
   <p class="turn" id="table-turn"></p>
   <p class="hint" id="table-hint"></p>
+  <!-- the host's lesson, the first time you play at a table -->
+  <div class="tip" id="tip" hidden>
+    <p><b id="tip-who"></b> <span id="tip-text"></span></p>
+    <button class="link" id="tip-skip" type="button">Skip the lesson</button>
+  </div>
 </div>
 
 <section class="screen" id="table-menu" hidden>
@@ -132,8 +145,10 @@
       <ul id="table-record-rows"></ul>
     </div>
     <ul class="rules compact" id="table-rules"></ul>
+    <p class="note controls-line" id="table-controls"></p>
     <button class="big" id="table-play" type="button">Play</button>
     <button class="secondary wide" id="table-leave" type="button">Stand up and look around</button>
+    <button class="link another" data-another type="button">Another table…</button>
   </div>
 </section>
 
@@ -149,24 +164,27 @@
     <p class="note" id="table-board-note"></p>
     <button class="big" id="table-again" type="button">Play again</button>
     <button class="secondary wide" id="table-over-leave" type="button">Leave the table</button>
+    <button class="link another" data-another type="button">Another table…</button>
   </div>
 </section>
 
+<!-- How to play: a page for getting around and one for each game (content in src/guides.js) -->
 <section class="sheet" id="rules" hidden>
-  <div class="panel">
-    <h2>How to play Ayo</h2>
-    <ol class="rules">
-      <li>The near row of six pits is yours. Each starts with 4 seeds.</li>
-      <li>On your turn, pick one of your pits. All its seeds are sown one by one into the pits after it, going anticlockwise: along your row to the right, then back along Baba's row.</li>
-      <li>If your last seed lands in one of Baba's pits and makes it <b>2 or 3</b>, you capture them. Then check the pit before it: if that's also Baba's and holds 2 or 3, take those too, and so on.</li>
-      <li>A pit with 12 or more seeds goes all the way round, and skips the pit it started from.</li>
-      <li>You can't take every seed Baba has in one move. If you try, you take nothing.</li>
-      <li>If Baba's row is empty, you must give him seeds if you can.</li>
-      <li>The first to <b>25 seeds</b> wins. If nobody can capture for a long time, each player keeps the seeds on their own side.</li>
-    </ol>
-    <p class="note">On Easy and Normal, pointing at (or tapping) one of your pits shows where its last seed will land and what it would capture.</p>
-    <button class="secondary wide" id="replay-lesson" type="button">Show me Baba’s lesson again</button>
+  <div class="panel guide">
+    <div class="guide-tabs" id="guide-tabs" role="tablist"></div>
+    <div class="guide-body" id="guide-body"></div>
+    <button class="secondary wide" id="replay-lesson" type="button">Show me the lesson again next game</button>
     <button class="big" id="rules-close" type="button">Got it</button>
+  </div>
+</section>
+
+<!-- The table picker: every table, your record there, and a way to get there -->
+<section class="sheet" id="tables-sheet" hidden>
+  <div class="panel">
+    <h2>The tables</h2>
+    <ul class="table-list" id="table-list"></ul>
+    <button class="secondary wide" id="tour-start" type="button">🚶 Show me around</button>
+    <button class="big" id="tables-close" type="button">Close</button>
   </div>
 </section>
 

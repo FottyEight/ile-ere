@@ -377,7 +377,7 @@ export const GUIDES = {
       },
       {
         heading: 'Finding a table quickly',
-        html: '<ul><li>Tap <b>Tables</b> for a list of all six tables. Tap one and you walk straight there and sit down.</li><li>The <b>mini-map</b> in the corner shows the whole joint. Tap a table on it to go there.</li><li>New here? Tap <b>Show me around</b> and Baba gives you a short tour.</li></ul>',
+        html: '<ul><li>Tap the <b>☰</b> button (top right) for a list of all six tables. Tap one and you walk straight there and sit down.</li><li>The <b>mini-map</b> in the bottom corner shows the whole joint (tap <b>Map</b> to open it). Tap a table on it to go there, or anywhere else to walk there.</li><li>New here? Tap <b>☰</b>, then <b>Show me around</b>, and Baba sends you round every table.</li></ul>',
       },
       {
         heading: 'Who plays where',

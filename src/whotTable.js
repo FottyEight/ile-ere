@@ -196,6 +196,7 @@ export function createWhotTable(ctx) {
     const penalty = state.pending;
     ctx.actions([{ label: penalty ? `Pick ${penalty.amount}` : 'Go to market', alt: true, onClick: () => act({ type: 'market' }) }]);
     const canPlay = W.legalPlays(state).some((a) => a.type === 'play');
+    ctx.teach(canPlay ? 'match' : 'market');
     ctx.hint(penalty
       ? (canPlay ? `Defend with a ${penalty.kind === 'two' ? '2' : '5'}, or pick ${penalty.amount}` : `You have no ${penalty.kind === 'two' ? '2' : '5'}: pick ${penalty.amount}`)
       : canPlay ? 'Tap a card to play it (the playable ones sit forward)' : 'Nothing to play: go to market');
@@ -230,13 +231,13 @@ export function createWhotTable(ctx) {
         if (r) r.pose = { reach: 1, reachToX: 0 };
         if (e.player === 0) { ctx.pose.me.reach = 1; ctx.pose.me.reachToX = 0; }
         ctx.sfx.clack();
-        if (e.card.number === 2) shout(e.player, SHOUT.two);
-        else if (e.card.number === 5) shout(e.player, SHOUT.three);
+        if (e.card.number === 2) { shout(e.player, SHOUT.two); ctx.teach('pickTwo'); }
+        else if (e.card.number === 5) { shout(e.player, SHOUT.three); ctx.teach('pickThree'); }
       }
-      if (e.type === 'holdOn') shout(e.player, SHOUT.holdOn);
-      if (e.type === 'suspended') { shout(mover, SHOUT.suspended); regular(e.player)?.c.gesture('shake', 1.2); }
-      if (e.type === 'generalMarket') shout(e.player, SHOUT.general);
-      if (e.type === 'call') ctx.say(`I need ${SHAPE_WORD[e.shape]}!`, mover === 0 ? 'you' : NAMES[mover], 2000);
+      if (e.type === 'holdOn') { shout(e.player, SHOUT.holdOn); ctx.teach('holdOn'); }
+      if (e.type === 'suspended') { shout(mover, SHOUT.suspended); regular(e.player)?.c.gesture('shake', 1.2); ctx.teach('suspension'); }
+      if (e.type === 'generalMarket') { shout(e.player, SHOUT.general); ctx.teach('generalMarket'); }
+      if (e.type === 'call') { ctx.say(`I need ${SHAPE_WORD[e.shape]}!`, mover === 0 ? 'you' : NAMES[mover], 2000); ctx.teach('whot'); }
       if (e.type === 'draw') { focusPoint = marketPos.clone(); ctx.sfx.pickup(); }
       if (e.type === 'reshuffle') ctx.toast('The market is finished. The pile is shuffled back in.', 2200);
     }
@@ -248,6 +249,7 @@ export function createWhotTable(ctx) {
     if (win) return gameOver(win.player, win.reason);
     // check up: one card left
     if (state.hands[mover].length === 1 && mover !== 0) ctx.say('Last card!', NAMES[mover], 1600);
+    if (state.hands[mover].length === 1) ctx.teach('lastCard');
     next();
   }
 
@@ -286,7 +288,7 @@ export function createWhotTable(ctx) {
     rules: [
       'Play a card that matches the top card’s <b>shape</b> or <b>number</b>, or go to market (draw one).',
       '<b>1</b> Hold on: play again · <b>2</b> Pick two · <b>5</b> Pick three (defend with the same number) · <b>8</b> Suspension · <b>14</b> General market',
-      '<b>Whot (20)</b> plays on anything, and you call the shape the next player must follow.',
+      '<b>Whot (20)</b> plays on anything except a Pick two or Pick three, and you call the shape the next player must follow.',
       'First to play their last card wins.',
     ],
     greetings: ['Come and sit! We go deal you in.', 'Ehen, a fourth player! Sit down.', 'You know Whot? Pick two dey wait you o!'],

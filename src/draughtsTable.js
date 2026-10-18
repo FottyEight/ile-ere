@@ -112,6 +112,7 @@ export function createDraughtsTable(ctx) {
     if (lastMove) for (const i of [lastMove.from, lastMove.to]) highlight(i, 'last');
     const moves = D.legalMoves(state);
     const capturing = moves.some((m) => m.captures.length);
+    if (capturing) ctx.teach('mustCapture');
     if (selected >= 0) {
       highlight(selected, 'select');
       for (const m of moves.filter((m) => m.from === selected)) highlight(m.to, m.captures.length ? 'capture' : 'move');
@@ -160,6 +161,8 @@ export function createDraughtsTable(ctx) {
     ctx.pose.me.reach = 0;
     state = D.play(state, move);
     lastMove = move;
+    ctx.teach(move.captures.length ? 'firstCapture' : 'firstMove');
+    if (move.crowned) ctx.teach('king');
     if (move.captures.length >= 2) {
       tunde()?.c.gesture('surprise', 1.6);
       ctx.say(ctx.pickLine([`Ehn! ${move.captures.length} at once?`, 'Who taught you that one?', 'Haba! Slow down.']), 'Tunde', 2400);
@@ -194,6 +197,7 @@ export function createDraughtsTable(ctx) {
     } else if (move.crowned) {
       ctx.say('My king don land!', 'Tunde', 2000);
     }
+    if (move.crowned) ctx.teach('king');
     hud();
     busy = false;
     next();

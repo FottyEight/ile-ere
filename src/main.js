@@ -10,6 +10,8 @@ import { createLudoTable } from './ludoTable.js';
 import { newGame, play, legalMoves, chooseMove } from './ayo.js';
 import { whoami, saveRun, leaderboard, signIn, onStartNg, cameAsGuest, FALLBACK_GUEST } from './startng.js';
 import { unlock, sfx, toggleMute, isMuted, setAmbience, toggleRadio, radioPlaying, okada, cluck } from './sound.js';
+import { makeGrid, findPath, createPathLine, makeSign, createMinimap } from './nav.js';
+import { GUIDES, CONTROLS, LESSONS } from './guides.js';
 
 const params = new URLSearchParams(location.search);
 const $ = (id) => document.getElementById(id);
@@ -283,7 +285,67 @@ function say(text, who = 'baba', ms = 2600) {
 const pickLine = (lines) => lines[Math.floor(Math.random() * lines.length)];
 // whose speech bubble is showing, so their mouth moves (for about as long as it takes to say it)
 let talkUntil = 0;
-const talkingNow = (who) => !$('bubble').hidden && $('bubble').dataset.who === who && performance.now() < talkUntil;
+const talkingNow = (who) => (!$('bubble').hidden && $('bubble').dataset.who === who && performance.now() < talkUntil)
+  || (teaching.who === who && performance.now() < teaching.talkUntil);
+
+// ── Lessons at the other tables: the first time you play, the host explains as things happen ──
+// Lines come from LESSONS (guides.js). They show in a tip under the scoreboard, one after
+// another, so the players' shouts in speech bubbles don't cut them off.
+const LESSON_SPEAKER = { draughts: 'Tunde', whot: 'Iya Bisi', ludo: 'Kemi', snooker: 'Emeka', foosball: 'Chidi' };
+const teaching = { id: null, who: null, said: new Set(), queue: [], timer: 0, talkUntil: 0 };
+const isTaught = (id) => { try { return localStorage.getItem(`joint-taught-${id}`) === '1'; } catch { return false; } };
+function markTaught(id, yes = true) {
+  try { if (yes) localStorage.setItem(`joint-taught-${id}`, '1'); else localStorage.removeItem(`joint-taught-${id}`); } catch { /* storage blocked */ }
+}
+function beginTeaching(id) {
+  stopTeaching();
+  if (!LESSONS[id] || isTaught(id)) return;
+  Object.assign(teaching, { id, who: LESSON_SPEAKER[id], said: new Set() });
+  teach('intro', 1400); // after the host's opening line
+}
+function teach(key, delay = 0) {
+  const lines = teaching.id && LESSONS[teaching.id]?.[key];
+  if (!lines || teaching.said.has(key)) return;
+  teaching.said.add(key);
+  teaching.queue.push(...[].concat(lines));
+  if (!teaching.timer) teaching.timer = setTimeout(nextTip, delay);
+}
+function nextTip() {
+  const line = teaching.queue.shift();
+  if (!line) {
+    teaching.timer = setTimeout(() => { teaching.timer = 0; $('tip').hidden = true; }, 2500);
+    return;
+  }
+  $('tip-who').textContent = `${teaching.who}:`;
+  $('tip-text').textContent = line;
+  $('tip').hidden = false;
+  regulars.find((r) => r.name === teaching.who)?.c.gesture('nod', 0.8);
+  // long enough to read, then the next line (the last one lingers a little)
+  const ms = THREE.MathUtils.clamp(line.length * 60, 3200, 9000);
+  teaching.talkUntil = performance.now() + Math.min(ms, 400 + line.length * 55);
+  teaching.timer = setTimeout(nextTip, ms);
+}
+function stopTeaching() {
+  clearTimeout(teaching.timer);
+  Object.assign(teaching, { id: null, who: null, queue: [], timer: 0, talkUntil: 0 });
+  $('tip').hidden = true;
+}
+// a finished first game ends the lesson at that table
+function endTeaching(id) {
+  if (teaching.id !== id) return;
+  markTaught(id);
+  const done = LESSONS[id]?.done;
+  const who = teaching.who;
+  stopTeaching();
+  if (done) setTimeout(() => say(done, who, 4200), 1600);
+}
+$('tip-skip').onclick = () => {
+  if (!teaching.id) return;
+  markTaught(teaching.id);
+  const who = teaching.who;
+  stopTeaching();
+  say('Okay, you know am already. No wahala!', who, 2400);
+};
 
 // ── First-game lesson: Baba talks you through your first moves and first capture ──
 let taught = false;
@@ -324,11 +386,6 @@ function lessonTurn(moves) {
   }
 }
 $('skip-lesson').onclick = () => endLesson('Alright, you know the game. Let’s play!');
-$('replay-lesson').onclick = () => {
-  taught = false;
-  try { localStorage.removeItem('ayo-taught'); } catch { /* storage blocked */ }
-  $('replay-lesson').textContent = 'The lesson will play in your next game';
-};
 
 function startGame() {
   unlock();
@@ -604,14 +661,12 @@ async function renderBoard(list = $('board'), note = $('board-note')) {
 
 $('play').onclick = startGame;
 $('again').onclick = () => { pose.me.cheer = pose.baba.cheer = 0; setMode('menu'); renderLevels(); renderRecord(); };
-$('rules-open').onclick = () => { $('rules').hidden = false; };
-$('rules-close').onclick = () => { $('rules').hidden = true; };
 $('mute').textContent = isMuted() ? '\u{1F507}' : '\u{1F50A}';
 $('mute').onclick = () => { unlock(); $('mute').textContent = toggleMute() ? '\u{1F507}' : '\u{1F50A}'; };
 setUpSeeds();
 setMode('walk');
 updateScores();
-setTimeout(() => toast('Welcome to Baba’s Joint! Walk up to a table to play.', 5000), 600);
+setTimeout(() => toast('Welcome to Baba’s Joint! Walk up to a table to play, or tap ☰ for the tables and a tour.', 6000), 600);
 
 // ── Seed counts over each pit ──
 const counts = [];
@@ -777,7 +832,7 @@ renderer.domElement.addEventListener('pointerup', (e) => {
       toast(on ? 'Baba’s radio is on 🎶' : 'Radio off', 1600);
     } else {
       const hit = raycaster.ray.intersectPlane(floorPlane, new THREE.Vector3());
-      if (hit) walkTo(hit);
+      if (hit) { if (tour.active) endTour(); walkTo(hit); }
     }
     drag = null;
     return;
@@ -849,6 +904,8 @@ const walker = {
   target: null, // a point to walk to (from a tap or click)
   goingTo: null, // a table to use on arrival
   seat: null, // { from, to, t, face, onDone } while sitting down
+  path: [], // the corners still to come on the way to `target`
+  onArrive: null, // called when you get there (true) or get stuck (false)
 };
 const walkCam = { yaw: 0, pitch: 0.32, dist: 3.2, dragged: 0 };
 walkCam.yaw = walker.heading + Math.PI;
@@ -858,19 +915,31 @@ for (const s of house.stations) {
 }
 const stationById = (id) => house.stations.find((s) => s.id === id);
 let nearStation = null;
-let greeted = new Set();
 
-function walkTo(point) {
+// the floor you can walk on, as a grid, for finding a way round tables and walls
+const WALK_AREA = { minX: VERANDAH.minX, maxX: VERANDAH.maxX, minZ: VERANDAH.back, maxZ: YARD.front, verandahFront: VERANDAH.front };
+const walkGrid = makeGrid(house.colliders, WALK_AREA, 0.2, BODY_R + 0.04);
+const pathLine = createPathLine(scene);
+
+function walkTo(point, { sit = true, onArrive = null } = {}) {
   // clicking on or near a table walks you up to it and sits you down
-  const table = house.stations.find((s) => Math.hypot(point.x - s.centre.x, point.z - s.centre.z) < 1.0);
-  if (table) {
-    walker.target = table.approach.clone();
-    walker.goingTo = table;
-  } else {
-    walker.target = point.clone().setY(0);
-    walker.goingTo = null;
-  }
-  tapMark(walker.target);
+  const table = sit ? house.stations.find((s) => Math.hypot(point.x - s.centre.x, point.z - s.centre.z) < 1.0) : null;
+  const dest = table ? table.approach.clone() : new THREE.Vector3(point.x, 0, point.z);
+  walker.goingTo = table ?? null;
+  walker.onArrive = onArrive;
+  walker.stuck = 0;
+  // the way there, round anything in between (straight there if no way is found)
+  const path = findPath(walkGrid, walker.pos, dest) ?? [{ x: dest.x, z: dest.z }];
+  walker.path = path.map((p) => new THREE.Vector3(p.x, 0, p.z));
+  walker.target = walker.path.shift();
+  pathLine.show();
+  tapMark(dest);
+}
+function stopWalking() {
+  walker.target = null;
+  walker.path = [];
+  walker.goingTo = null;
+  walker.onArrive = null;
 }
 // a little ring where you tapped
 const tapRing = new THREE.Mesh(
@@ -919,20 +988,24 @@ function stepWalker(dt) {
     const fwd = new THREE.Vector2(-Math.sin(walkCam.yaw), -Math.cos(walkCam.yaw));
     const right = new THREE.Vector2(-fwd.y, fwd.x);
     dir = fwd.multiplyScalar(iz).add(right.multiplyScalar(ix)).normalize();
-    walker.goingTo = null;
+    if (walker.target) { stopWalking(); pathLine.hide(); }
+    if (tour.active) endTour();
   } else if (walker.target) {
     const to = new THREE.Vector2(walker.target.x - walker.pos.x, walker.target.z - walker.pos.z);
     const d = to.length();
-    if (d < 0.08) {
-      walker.target = null;
-      if (walker.goingTo) {
-        const s = walker.goingTo;
-        walker.goingTo = null;
-        useStation(s);
-      }
+    const last = !walker.path?.length;
+    if (!last && d < 0.3) {
+      walker.target = walker.path.shift(); // a corner on the way: carry straight on to the next point
+      dir = to.normalize();
+    } else if (d < 0.08) {
+      const s = walker.goingTo;
+      const done = walker.onArrive;
+      stopWalking();
+      if (s) useStation(s);
+      done?.(true);
     } else {
       dir = to.normalize();
-      if (d < 0.4) dir.multiplyScalar(Math.max(0.35, d / 0.4)); // slow down on arrival
+      if (last && d < 0.4) dir.multiplyScalar(Math.max(0.35, d / 0.4)); // slow down on arrival
     }
   }
   const wantSpeed = dir ? (held.has('Shift') ? RUN_SPEED : WALK_SPEED) * Math.min(1, dir.length()) : 0;
@@ -950,7 +1023,13 @@ function stepWalker(dt) {
     // stuck against something on the way to a tapped point: give up
     if (walker.target && walker.pos.distanceTo(before) < walker.speed * dt * 0.2) {
       walker.stuck = (walker.stuck ?? 0) + dt;
-      if (walker.stuck > 0.6) { walker.target = null; walker.goingTo = null; walker.stuck = 0; }
+      if (walker.stuck > 0.6) {
+        const done = walker.onArrive;
+        stopWalking();
+        walker.stuck = 0;
+        pathLine.hide();
+        done?.(false);
+      }
     } else {
       walker.stuck = 0;
     }
@@ -959,6 +1038,12 @@ function stepWalker(dt) {
 
   // the camera swings round behind you as you walk, unless you've just turned it yourself
   walkCam.dragged -= dt;
+  if (walkCam.wantYaw !== undefined) {
+    let d = walkCam.wantYaw - walkCam.yaw;
+    d = Math.atan2(Math.sin(d), Math.cos(d));
+    walkCam.yaw += d * Math.min(1, dt * 3);
+    if (Math.abs(d) < 0.01 || walker.target) walkCam.wantYaw = undefined;
+  }
   if (walker.speed > 0.3 && walkCam.dragged <= 0) {
     let d = walker.heading + Math.PI - walkCam.yaw;
     d = Math.atan2(Math.sin(d), Math.cos(d));
@@ -972,34 +1057,16 @@ function stepWalker(dt) {
   }
   if (near !== nearStation) {
     nearStation = near;
-    showPrompt(near);
-    if (near && !near.ready && !greeted.has(near.id)) {
-      greeted.add(near.id);
-      const host = regulars.find((r) => r.station === near.id);
-      if (host) {
-        host.c.gesture('nod', 1.2);
-        say(pickLine(OPENING_SOON[near.id] ?? ['Come back soon, this table is opening.']), host.name, 4200);
-      }
-    }
+    showPrompt(tour.active ? null : near);
   }
 }
-
-const OPENING_SOON = {
-  draughts: ['Ah, you play draughts? Come back soon, I’m setting up the board.', 'Draughts? This table opens soon. I go beat you!'],
-  whot: ['Whot is opening soon. We go show you “Pick two”!', 'Sit down soon, we’re still shuffling the cards.'],
-  ludo: ['Uncle is still teaching us the rules. Ludo opens soon!', 'Ludo soon! I’m blue, you can be red.'],
-  snooker: ['The table is being levelled. Snooker opens soon.', 'Snooker soon, my brother. Practise your cue.'],
-  foosball: ['Table football is coming soon. Get ready!', 'Soon! Na me be Messi for this table.'],
-};
 
 function showPrompt(s) {
   const p = $('sit-prompt');
   if (!s) { p.hidden = true; return; }
   p.hidden = false;
   p.disabled = !s.ready;
-  p.textContent = s.ready
-    ? `Sit down: ${s.name} with ${s.host} (E)`
-    : `${s.name} with ${s.host}: opening soon`;
+  p.textContent = `${s.standing ? 'Play' : 'Sit down'}: ${s.name} with ${s.host} (E)`;
 }
 $('sit-prompt').onclick = () => { if (nearStation) useStation(nearStation); };
 
@@ -1050,6 +1117,7 @@ function standUp() {
   if (busy) return;
   const s = atStation ?? stationById('ayo');
   if (activeTable) { activeTable.stop(); activeTable = null; }
+  stopTeaching();
   walker.seated = false;
   atStation = null;
   walker.pos.copy(s.approach);
@@ -1087,6 +1155,8 @@ function tableContext(id) {
     get speed() { return SPEED; },
     get time() { return time; },
     sfx, say, toast, wait, fly, pickLine,
+    // the host explains this, if it's your first game here (keys from LESSONS in guides.js)
+    teach: (key) => { if (teaching.id === id) teach(key); },
     turn: (text) => { $('table-turn').textContent = text; },
     hint: (text) => { $('table-hint').textContent = text; },
     // seats: [{ name, value, active }]
@@ -1142,6 +1212,7 @@ function openTable(s) {
     li.innerHTML = r;
     return li;
   }));
+  $('table-controls').textContent = (CONTROLS[s.id] ?? []).join(' · ');
   $('table-play').textContent = `Play ${t.title}`;
   renderTableLevels();
   renderTableRecord(s.id);
@@ -1178,6 +1249,8 @@ function startTable() {
   yaw = v.yaw;
   pitch = v.pitch;
   dist = v.dist;
+  // first time here? the host talks you through it
+  beginTeaching(activeTable.id);
   activeTable.start(tableLevel);
 }
 $('table-play').onclick = startTable;
@@ -1236,6 +1309,7 @@ async function saveWins(statusEl) {
 }
 async function finishTable(id, result) {
   setMode('tover');
+  endTeaching(id);
   const rec = tableRecord(id);
   const r = rec[tableLevel];
   if (result.outcome === 'win') r.w++;
@@ -1268,6 +1342,194 @@ tableGames.snooker = createSnookerTable(tableContext('snooker'));
 tableGames.draughts = createDraughtsTable(tableContext('draughts'));
 tableGames.ludo = createLudoTable(tableContext('ludo'));
 for (const s of house.stations) s.ready = s.id === 'ayo' || !!tableGames[s.id];
+
+// ── Getting around: signs over the tables, the table picker, the mini-map and Baba's tour ──
+const TABLE_ICON = { ayo: '🌰', draughts: '♟️', whot: '🃏', ludo: '🎲', snooker: '🎱', foosball: '⚽' };
+const SIGN_SUB = { ayo: 'with Baba', draughts: 'with Tunde', whot: 'with Iya Bisi & co', ludo: 'with Kemi & Tobi', snooker: 'with Emeka', foosball: 'with Chidi' };
+const signs = new THREE.Group();
+for (const s of house.stations) {
+  const sign = makeSign(s.name, SIGN_SUB[s.id] ?? '');
+  sign.position.set(s.centre.x, 1.95, s.centre.z);
+  // under the snooker canopy the bulb hangs in the middle, so that sign hangs at the edge you come from
+  if (s.id === 'snooker') sign.position.add(s.approach.clone().sub(s.centre).setY(0).setLength(1.45)).setY(1.95);
+  signs.add(sign);
+}
+scene.add(signs);
+
+// your record at a table, for the picker: "3–1" (wins–losses), or nothing if you haven't played
+function recordSummary(id) {
+  const rows = id === 'ayo' ? record.levels : tableRecord(id);
+  const w = rows.reduce((n, r) => n + r.w, 0);
+  const l = rows.reduce((n, r) => n + r.l, 0);
+  const d = rows.reduce((n, r) => n + r.d, 0);
+  return w + l + d ? `${w}–${l}${d ? `–${d}` : ''}` : '';
+}
+const seatedAtAyo = () => ['menu', 'playing', 'over'].includes(mode);
+function renderTablePicker() {
+  const inGame = mode === 'playing' || mode === 'tplay';
+  $('table-list').replaceChildren(...house.stations.map((s) => {
+    const li = document.createElement('li');
+    const b = document.createElement('button');
+    b.type = 'button';
+    const here = atStation === s || (s.id === 'ayo' && seatedAtAyo());
+    const rec = recordSummary(s.id);
+    b.innerHTML = '<span class="icon"></span><span class="what"><b></b><small></small></span><span class="rec"></span>';
+    b.querySelector('.icon').textContent = TABLE_ICON[s.id] ?? '•';
+    b.querySelector('b').textContent = s.name;
+    b.querySelector('small').textContent = here ? `You’re here · ${s.host}` : inGame ? `Leaves this game · ${s.host}` : s.host;
+    b.querySelector('.rec').textContent = rec;
+    b.querySelector('.rec').title = rec ? 'Your wins–losses here' : '';
+    b.onclick = () => { $('tables-sheet').hidden = true; travelTo(s); };
+    li.append(b);
+    return li;
+  }));
+  $('tour-start').hidden = mode === 'playing' || mode === 'tplay';
+}
+function openTablePicker() { renderTablePicker(); $('tables-sheet').hidden = false; }
+$('tables-open').onclick = openTablePicker;
+$('tables-close').onclick = () => { $('tables-sheet').hidden = true; };
+document.querySelectorAll('[data-another]').forEach((b) => { b.onclick = openTablePicker; });
+
+// walk to a table and sit down; from another table you stand up first
+function travelTo(s) {
+  if (tour.active) endTour();
+  if (atStation === s || (s.id === 'ayo' && seatedAtAyo())) return;
+  if (seatedAtAyo() || atTable()) {
+    if (busy) { toast('Wait for the seeds to land first.', 1800); return; }
+    standUp();
+  }
+  if (walker.seat) return;
+  walkTo(s.centre);
+}
+
+// the mini-map in the corner: tap a table to go there, or a spot to walk to it
+const minimap = createMinimap($('minimap-canvas'), { colliders: house.colliders, stations: house.stations, bounds: WALK_AREA, icons: TABLE_ICON });
+let mapFolded = innerWidth < 640;
+try { const f = localStorage.getItem('joint-map-folded'); if (f !== null) mapFolded = f === '1'; } catch { /* storage blocked */ }
+function foldMap(yes) {
+  mapFolded = yes;
+  $('minimap').classList.toggle('folded', yes);
+  $('minimap-toggle').textContent = yes ? 'Map' : 'Hide map';
+}
+foldMap(mapFolded);
+$('minimap-toggle').onclick = () => {
+  foldMap(!mapFolded);
+  try { localStorage.setItem('joint-map-folded', mapFolded ? '1' : '0'); } catch { /* storage blocked */ }
+};
+$('minimap-canvas').addEventListener('click', (e) => {
+  unlock();
+  if (mode !== 'walk' || walker.seat) return;
+  if (tour.active) endTour();
+  const hit = minimap.pick(e.clientX, e.clientY);
+  if (hit.station) walkTo(hit.station.centre);
+  else walkTo(new THREE.Vector3(hit.point.x, 0, hit.point.z), { sit: false });
+});
+let mapIn = 0;
+function stepMinimap(dt) {
+  mapIn -= dt;
+  if (mapFolded || mapIn > 0) return;
+  mapIn = 0.1;
+  minimap.draw(walker.pos, walker.heading, walker.goingTo);
+}
+
+// ── How to play: a page about the joint and one per game ──
+const GUIDE_TABS = [['joint', 'The joint'], ['ayo', 'Ayo'], ['draughts', 'Draughts'], ['whot', 'Whot'], ['ludo', 'Ludo'], ['snooker', 'Snooker'], ['foosball', 'Table football']];
+let guideTab = 'joint';
+function showGuide(key) {
+  guideTab = key;
+  $('guide-tabs').replaceChildren(...GUIDE_TABS.map(([k, label]) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.setAttribute('role', 'tab');
+    b.textContent = label;
+    b.setAttribute('aria-selected', String(k === key));
+    b.onclick = () => showGuide(k);
+    return b;
+  }));
+  const g = GUIDES[key];
+  const body = $('guide-body');
+  // (all of this text is our own, from guides.js)
+  body.innerHTML = `<h2>${g.title}</h2><p>${g.intro}</p>`;
+  const controls = CONTROLS[key === 'joint' ? 'walk' : key];
+  if (controls) body.insertAdjacentHTML('beforeend', `<h3>Controls</h3><ul>${controls.map((c) => `<li>${c}</li>`).join('')}</ul>`);
+  for (const sec of g.sections) body.insertAdjacentHTML('beforeend', `<h3>${sec.heading}</h3>${sec.html}${sec.diagram ?? ''}`);
+  body.scrollTop = 0;
+  // the lesson button: Baba's Ayo lesson, or the host's at another table
+  const rl = $('replay-lesson');
+  rl.hidden = key === 'joint';
+  const pending = key === 'ayo' ? !taught : !isTaught(key);
+  rl.textContent = pending ? 'The lesson will play in your next game here' : 'Show me the lesson again next game';
+  rl.disabled = pending;
+}
+// opens on whatever you're doing: the table you're at, the one you're near, or the joint
+function guideContext() {
+  if (atTable() && activeTable) return activeTable.id;
+  if (seatedAtAyo()) return 'ayo';
+  return nearStation?.id ?? 'joint';
+}
+$('rules-open').onclick = () => { showGuide(guideContext()); $('rules').hidden = false; };
+$('rules-close').onclick = () => { $('rules').hidden = true; };
+$('replay-lesson').onclick = () => {
+  if (guideTab === 'ayo') {
+    taught = false;
+    try { localStorage.removeItem('ayo-taught'); } catch { /* storage blocked */ }
+  } else {
+    markTaught(guideTab, false);
+  }
+  showGuide(guideTab);
+};
+$('walk-hint').textContent = CONTROLS.walk.slice(0, 2).join(' · ');
+
+// ── "Show me around": Baba sends you round every table (only when you ask) ──
+const TOUR = [
+  { id: 'foosball', who: 'Chidi', line: 'Table football! First to five goals. No spinning the rods o!' },
+  { id: 'snooker', who: 'Emeka', line: 'Snooker under the canopy. Bring a steady hand and small patience.' },
+  { id: 'ludo', who: 'Kemi', line: 'Ludo with me and Tobi! You’ll be red. Come and play, please!' },
+  { id: 'whot', who: 'Iya Bisi', line: 'This is the Whot table. Four of us, plenty talk. Pick two dey wait you!' },
+  { id: 'draughts', who: 'Tunde', line: 'I’m Tunde the barber. I cut hair, and I cut pieces. Draughts, ten by ten.' },
+  { id: 'ayo', who: 'baba', line: 'And this is my table. Ayo, the game of our fathers. Nobody beats Baba easily!' },
+];
+const tour = { active: false, stop: 0, timer: 0 };
+function startTour() {
+  $('tables-sheet').hidden = true;
+  if (mode === 'playing' || mode === 'tplay' || busy) { toast('Finish or leave this game first.', 2000); return; }
+  if (seatedAtAyo() || atTable()) standUp();
+  if (walker.seat) return;
+  Object.assign(tour, { active: true, stop: 0 });
+  $('tour-end').hidden = false;
+  showPrompt(null);
+  say('Welcome! Let me show you round my joint. Just follow the line.', 'baba', 3600);
+  tour.timer = setTimeout(tourNext, 2600);
+}
+function tourNext() {
+  if (!tour.active) return;
+  const step = TOUR[tour.stop];
+  if (!step) {
+    endTour();
+    say('That’s everybody! Tap ☰ for the tables any time, or just walk up and sit. Enjoy yourself!', 'baba', 5200);
+    return;
+  }
+  const s = stationById(step.id);
+  walkTo(s.approach, { sit: false, onArrive: () => {
+    if (!tour.active) return;
+    // face the table and let its host say hello
+    walkCam.wantYaw = s.face + Math.PI;
+    walkCam.dragged = 2.5;
+    if (step.who !== 'baba') regulars.find((r) => r.name === step.who)?.c.gesture('nod', 1.2);
+    say(step.line, step.who, 3800);
+    tour.stop++;
+    tour.timer = setTimeout(tourNext, 3600);
+  } });
+}
+function endTour() {
+  tour.active = false;
+  clearTimeout(tour.timer);
+  $('tour-end').hidden = true;
+  if (walker.onArrive) stopWalking();
+  showPrompt(nearStation);
+}
+$('tour-start').onclick = startTour;
+$('tour-end').onclick = () => { endTour(); pathLine.hide(); };
 
 // ── Life on the verandah ──
 // Where people look: the pit being sown, the pit you're considering, each other when talking,
@@ -1449,6 +1711,7 @@ function frame() {
   if (mode === 'walk') {
     if (walker.seat) stepSitting(dt);
     else stepWalker(dt);
+    stepMinimap(dt);
     playerNode.position.copy(walker.pos);
     playerNode.rotation.y = walker.heading;
   } else if (atTable() && atStation) {
@@ -1459,6 +1722,8 @@ function frame() {
     playerNode.rotation.y = Math.PI;
   }
   if (activeTable && mode === 'tplay') activeTable.update(dt, time);
+  pathLine.update(dt, walker.pos, mode === 'walk' && walker.target ? [walker.target, ...walker.path] : null);
+  signs.visible = mode === 'walk';
 
   const tall = Math.max(0, 1 / camera.aspect - 1);
   if (mode === 'walk') {

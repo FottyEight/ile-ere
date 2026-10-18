@@ -104,7 +104,7 @@ export function createFoosballTable(ctx) {
     levelLabel: 'How good is Chidi?',
     rules: [
       'Move your mouse (or drag your finger) up and down the table to slide your four rods.',
-      'Click, tap or press <b>Space</b> to kick. All your players swing together.',
+      'Click, tap or press <b>Space</b> (or Enter) to kick. All your players swing together.',
       'Keyboard: <b>W</b>/<b>S</b> or the arrow keys slide the rods.',
       'First to <b>5 goals</b> wins.',
     ],
@@ -129,6 +129,8 @@ export function createFoosballTable(ctx) {
       ctx.hint('Move up and down to slide your rods · click, tap or Space to kick');
       ctx.actions([{ label: 'Kick', onClick: () => kick(match, 0) }]);
       ctx.say(ctx.pickLine(['Oya, let’s go!', 'Kick off!', 'Defend well o!']), 'Chidi', 1800);
+      ctx.teach('slide');
+      ctx.teach('kick');
     },
     update(dt) {
       if (!playing) return;
@@ -154,6 +156,7 @@ export function createFoosballTable(ctx) {
             ctx.say(ctx.pickLine(['GOOOAL! Haha!', 'You see am? Messi!', 'Na so e be!']), 'Chidi', 2200);
           }
           lastScore = e.score;
+          ctx.teach('firstGoal');
         }
         if (e.type === 'win') {
           playing = false;

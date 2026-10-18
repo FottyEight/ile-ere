@@ -133,8 +133,12 @@ export function createSnookerTable(ctx) {
     if (placing) {
       ctx.hint('Ball in hand: move the pointer to place the cue ball inside the D, then tap to put it down');
       ctx.actions([]);
+      ctx.teach('placeCue');
       return;
     }
+    ctx.teach('aim');
+    ctx.teach('power');
+    ctx.teach(state.on === 'red' ? 'onRed' : 'onColour');
     ctx.hint('Point at the table to aim · hold Shoot (or Space) and let go to strike · ← → fine-tune');
     ctx.actions([{ label: 'Hold to shoot', onDown: startCharge, onUp: release }]);
   }
@@ -181,7 +185,7 @@ export function createSnookerTable(ctx) {
     ctx.toast(o.message, 2600);
     const e = emeka();
     if (o.foul) {
-      if (mover === 0) { e?.c.gesture('laugh', 1.4); ctx.say(ctx.pickLine(['Foul! Thank you o.', 'Ehn, free points!']), 'Emeka', 2000); }
+      if (mover === 0) { e?.c.gesture('laugh', 1.4); ctx.say(ctx.pickLine(['Foul! Thank you o.', 'Ehn, free points!']), 'Emeka', 2000); ctx.teach('foul'); }
       else { e?.c.gesture('shake', 1.4); ctx.say(ctx.pickLine(['Ah, foul. My hand shake.', 'That one slip.']), 'Emeka', 2000); }
     } else if (o.potted.length && mover === 0 && o.scored >= 5) {
       e?.c.gesture('surprise', 1.4);
@@ -263,7 +267,7 @@ export function createSnookerTable(ctx) {
     rules: [
       'While reds are on the table, pot a <b>red</b> (1 point), then any <b>colour</b>: yellow 2, green 3, brown 4, blue 5, pink 6, black 7.',
       'Colours come back to their spots until the reds are gone; then pot them in order, yellow to black.',
-      'Hitting the wrong ball first, missing everything or potting the white is a <b>foul</b>: at least 4 points to Emeka.',
+      'Hitting the wrong ball first, missing everything, potting the white or potting a ball you’re not on is a <b>foul</b>: at least 4 points to Emeka.',
       'Aim with the pointer, hold <b>Shoot</b> (or Space) to build power and let go to strike. The guide line is long on Easy, short on Hard.',
     ],
     greetings: ['You play snooker? Pick a cue.', 'One frame? Oya, rack them!', 'Ah, new challenger. Your break.'],
