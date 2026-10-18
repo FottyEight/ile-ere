@@ -1454,6 +1454,10 @@ function showGuide(key) {
   if (controls) body.insertAdjacentHTML('beforeend', `<h3>Controls</h3><ul>${controls.map((c) => `<li>${c}</li>`).join('')}</ul>`);
   for (const sec of g.sections) body.insertAdjacentHTML('beforeend', `<h3>${sec.heading}</h3>${sec.html}${sec.diagram ?? ''}`);
   body.scrollTop = 0;
+  // bring the chosen tab into view (on a phone the row scrolls sideways)
+  const tabs = $('guide-tabs');
+  const on = tabs.querySelector('[aria-selected="true"]');
+  requestAnimationFrame(() => { tabs.scrollLeft = on.offsetLeft - tabs.offsetLeft - (tabs.clientWidth - on.offsetWidth) / 2; });
   // the lesson button: Baba's Ayo lesson, or the host's at another table
   const rl = $('replay-lesson');
   rl.hidden = key === 'joint';
