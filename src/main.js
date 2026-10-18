@@ -57,7 +57,7 @@ const ELDER_STYLE = {
   body: 'male', primaryColor: '#efe8d8', secondaryColor: '#2c3e6b', skinColor: '#5b3a26',
   hairColor: '#cfcac0', hair: 'bald', hat: 'none', accessory: 'glasses',
 };
-const baba = buildCharacter(ELDER_STYLE);
+const baba = buildCharacter(ELDER_STYLE, { outfit: 'plain', energy: 0.55 }); // calm and slow
 {
   // Baba's fila: a soft cloth cap, its top folded over to one side
   const R = baba.headR;
@@ -88,7 +88,7 @@ shadowAll(baba.root);
 
 // ── The regulars at the other tables ──
 const regulars = house.regulars.map((r) => {
-  const c = buildCharacter(r.style);
+  const c = buildCharacter(r.style, r.look);
   shadowAll(c.root);
   c.root.position.copy(r.pos);
   c.root.rotation.y = r.face;
@@ -276,10 +276,14 @@ function say(text, who = 'baba', ms = 2600) {
   b.textContent = text;
   b.dataset.who = who;
   b.hidden = false;
+  talkUntil = performance.now() + Math.min(ms, 400 + text.length * 55); // roughly the time to say it
   clearTimeout(bubbleTimer);
   bubbleTimer = setTimeout(() => { b.hidden = true; }, ms / Math.sqrt(SPEED));
 }
 const pickLine = (lines) => lines[Math.floor(Math.random() * lines.length)];
+// whose speech bubble is showing, so their mouth moves (for about as long as it takes to say it)
+let talkUntil = 0;
+const talkingNow = (who) => !$('bubble').hidden && $('bubble').dataset.who === who && performance.now() < talkUntil;
 
 // ── First-game lesson: Baba talks you through your first moves and first capture ──
 let taught = false;
@@ -1430,7 +1434,7 @@ function stepRegulars(dt) {
       r.c.gesture(pickLine(r.standing ? ['nod', 'chin', 'laugh'] : ['nod', 'chin', 'laugh', 'chin']), 1.4 + Math.random());
       r.gestureIn = 5 + Math.random() * 10;
     }
-    r.c.animate(dt, { ...(r.pose ?? {}), time: time + r.pos.x, seated: !r.standing, look: lookToward(r.c, r.c.root.rotation.y, target) });
+    r.c.animate(dt, { ...(r.pose ?? {}), time: time + r.pos.x, seated: !r.standing, look: lookToward(r.c, r.c.root.rotation.y, target), talking: talkingNow(r.name) });
   }
 }
 const clock = new THREE.Clock();
@@ -1542,9 +1546,10 @@ function frame() {
         ? !atStation?.standing
         : mode !== 'walk' || (walker.seat && walker.seat.t > 0.45 && !walker.seat.station.standing),
       walk: mode === 'walk' ? walker.speed : 0,
+      talking: talkingNow('you'),
     });
   }
-  baba.animate(dt, { ...pose.baba, time: time + 1.3, look: gaze.baba });
+  baba.animate(dt, { ...pose.baba, time: time + 1.3, look: gaze.baba, talking: talkingNow('baba') });
   stepRegulars(dt);
   stepChickens(dt);
   stepStreet(dt);

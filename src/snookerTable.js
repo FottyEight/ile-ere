@@ -49,6 +49,7 @@ export function createSnookerTable(ctx) {
   scene.add(aimLine);
   const ghost = new THREE.Mesh(ballGeo, new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.25, depthWrite: false }));
   scene.add(ghost);
+  cue.visible = aimLine.visible = ghost.visible = false; // only while someone is aiming
 
   let state = S.newFrame();
   let level = 1;

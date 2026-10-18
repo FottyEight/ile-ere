@@ -384,21 +384,21 @@ export function buildHouse(scene, add) {
 
   // The regulars who sit (or stand) at the other tables.
   const regulars = [
-    { name: 'Tunde', station: 'draughts', pos: new THREE.Vector3(DRAUGHTS.x, 0, -0.72), face: 0,
+    { name: 'Tunde', look: { outfit: 'plain', energy: 1.1 }, station: 'draughts', pos: new THREE.Vector3(DRAUGHTS.x, 0, -0.72), face: 0,
       style: { body: 'male', primaryColor: '#f4f4f2', secondaryColor: '#3b3f4a', skinColor: '#6b4226', hairColor: '#111111', hair: 'short', hat: 'none', accessory: 'none' } },
-    { name: 'Iya Bisi', station: 'whot', pos: new THREE.Vector3(WHOT.x, 0, -0.82), face: 0,
+    { name: 'Iya Bisi', look: { outfit: 'ankara', energy: 0.9 }, station: 'whot', pos: new THREE.Vector3(WHOT.x, 0, -0.82), face: 0,
       style: { body: 'female', primaryColor: '#e1a120', secondaryColor: '#7a1f2b', skinColor: '#7a4a2a', hairColor: '#1a1410', hair: 'bun', hat: 'none', accessory: 'earrings' } },
-    { name: 'Mama Ngozi', station: 'whot', pos: new THREE.Vector3(WHOT.x - 0.82, 0, 0), face: Math.PI / 2,
+    { name: 'Mama Ngozi', look: { outfit: 'ankara', energy: 0.8 }, station: 'whot', pos: new THREE.Vector3(WHOT.x - 0.82, 0, 0), face: Math.PI / 2,
       style: { body: 'female', primaryColor: '#b0263c', secondaryColor: '#2b2f4a', skinColor: '#5c3a21', hairColor: '#1a1410', hair: 'braids', hat: 'none', accessory: 'glasses' } },
-    { name: 'Uncle Femi', station: 'whot', pos: new THREE.Vector3(WHOT.x + 0.82, 0, 0), face: -Math.PI / 2,
+    { name: 'Uncle Femi', look: { outfit: 'stripes', energy: 0.9 }, station: 'whot', pos: new THREE.Vector3(WHOT.x + 0.82, 0, 0), face: -Math.PI / 2,
       style: { body: 'male', primaryColor: '#2f7a4a', secondaryColor: '#2b2f4a', skinColor: '#8d5524', hairColor: '#2a2420', hair: 'short', hat: 'none', accessory: 'beard' } },
-    { name: 'Kemi', station: 'ludo', pos: new THREE.Vector3(LUDO.x, 0, -0.8), face: 0, child: true,
+    { name: 'Kemi', look: { outfit: 'ankara', energy: 1.6 }, station: 'ludo', pos: new THREE.Vector3(LUDO.x, 0, -0.8), face: 0, child: true,
       style: { body: 'female', primaryColor: '#ef6fa6', secondaryColor: '#5b2a86', skinColor: '#8d5524', hairColor: '#17120f', hair: 'ponytail', hat: 'none', accessory: 'none' } },
-    { name: 'Tobi', station: 'ludo', pos: new THREE.Vector3(LUDO.x + 0.8, 0, 0), face: -Math.PI / 2, child: true,
+    { name: 'Tobi', look: { outfit: 'stripes', energy: 1.6 }, station: 'ludo', pos: new THREE.Vector3(LUDO.x + 0.8, 0, 0), face: -Math.PI / 2, child: true,
       style: { body: 'male', primaryColor: '#1e6fd9', secondaryColor: '#e1a120', skinColor: '#6b4226', hairColor: '#17120f', hair: 'short', hat: 'cap', accessory: 'none' } },
-    { name: 'Emeka', station: 'snooker', pos: new THREE.Vector3(SNOOKER.x + 0.9, 0, SNOOKER.z - 1.0), face: 0.3, standing: true,
+    { name: 'Emeka', look: { outfit: 'plain', energy: 0.9 }, station: 'snooker', pos: new THREE.Vector3(SNOOKER.x + 0.9, 0, SNOOKER.z - 1.0), face: 0.3, standing: true,
       style: { body: 'male', primaryColor: '#1d1d22', secondaryColor: '#3a4a6b', skinColor: '#5c3a21', hairColor: '#0f0b08', hair: 'dreads', hat: 'none', accessory: 'none' } },
-    { name: 'Chidi', station: 'foosball', pos: new THREE.Vector3(FOOS.x, 0, FOOS.z - 0.62), face: 0, standing: true,
+    { name: 'Chidi', look: { outfit: 'jersey', energy: 1.3 }, station: 'foosball', pos: new THREE.Vector3(FOOS.x, 0, FOOS.z - 0.62), face: 0, standing: true,
       style: { body: 'male', primaryColor: '#f2f2f0', secondaryColor: '#1e3a6b', skinColor: '#7a4a2a', hairColor: '#17120f', hair: 'afro', hat: 'none', accessory: 'none' } },
   ];
 
