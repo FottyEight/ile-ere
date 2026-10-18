@@ -83,4 +83,4 @@ Recorded sounds and music live in `assets/audio/` (full per-file list in `assets
 - "Imela" (album "Ekene") and "Egwu Nwa" (album "Egwu Nwa") by Ugo Mbaise, from the Free Music Archive (https://freemusicarchive.org/music/ugo-mbaise/), licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/). Excerpted, faded and level-adjusted.
 - "singledrop1.aif", "singledrop2.aif", "singledrop3.aif" and "clatter1.aif" by jaybatzner on Freesound (https://freesound.org/people/jaybatzner/), licensed under CC BY 4.0. Trimmed, normalised and re-encoded.
 
-The voices are made up on the fly (a "babble" that follows each line's vowels), not recordings.
+People say their lines with the device's own speech voice (a Nigerian English voice where the device has one), or with real recordings dropped into `assets/audio/voice/` (see `RECORD-THESE.md` there).

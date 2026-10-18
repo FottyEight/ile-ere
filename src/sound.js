@@ -1,5 +1,5 @@
-// The joint's sound: recorded effects, ambience and music (assets/audio, see CREDITS.md), heard
-// from where they happen, plus made-up "babble" voices that follow what people say.
+// The house's sound: recorded effects, ambience and music (assets/audio, see CREDITS.md), heard
+// from where they happen, and people saying their lines out loud.
 // Browsers only allow audio after a click or key press, so call unlock() from one.
 // Until the recordings have loaded (or if they fail), short synthesized stand-ins play.
 
@@ -258,30 +258,80 @@ function duck(seconds) {
   radioOut.gain.setTargetAtTime(0.55, t + seconds, 0.5);
 }
 
-// ── Voices: a made-up babble that follows the words ──
-// Each syllable is a buzz shaped by the vowel it comes from in the text, at the speaker's own
-// pitch and pace (a low, slow Baba; quick, high kids). It plays from where they sit.
-const VOICES = {
-  baba: { pitch: 96, pace: 0.82 },
-  Tunde: { pitch: 124, pace: 1.08 },
-  'Iya Bisi': { pitch: 205, pace: 1.0 },
-  'Mama Ngozi': { pitch: 188, pace: 0.9 },
-  'Uncle Femi': { pitch: 116, pace: 0.95 },
-  Kemi: { pitch: 300, pace: 1.22 },
-  Tobi: { pitch: 272, pace: 1.3 },
-  Emeka: { pitch: 132, pace: 1.0 },
-  Chidi: { pitch: 148, pace: 1.15 },
-  you: { pitch: 150, pace: 1.0 },
+// ── Voices: people say their lines out loud ──
+// A line is played from a real recording if one has been added (see below); otherwise the
+// device's own speech voice reads it, with a Nigerian English voice where the device has one
+// (Edge on Windows has "Abeo" and "Ezinne"; Android often has one too). Each person has their
+// own voice, pitch and pace, and sounds quieter the further away they are.
+const PEOPLE = {
+  baba: { female: false, pitch: 0.78, rate: 0.86 },
+  Tunde: { female: false, pitch: 1.0, rate: 1.05 },
+  'Iya Bisi': { female: true, pitch: 1.0, rate: 1.0 },
+  'Mama Ngozi': { female: true, pitch: 0.88, rate: 0.92 },
+  'Uncle Femi': { female: false, pitch: 0.86, rate: 0.95 },
+  Kemi: { female: true, pitch: 1.55, rate: 1.1 },
+  Tobi: { female: false, pitch: 1.65, rate: 1.12 },
+  Emeka: { female: false, pitch: 0.95, rate: 1.0 },
+  Chidi: { female: false, pitch: 1.1, rate: 1.1 },
+  you: { female: false, pitch: 1.0, rate: 1.0 },
 };
-export function setVoice(who, v) { VOICES[who] = { ...VOICES[who], ...v }; }
-// first two formants of each vowel (Hz)
-const FORMANTS = { a: [780, 1250], e: [480, 1900], i: [320, 2300], o: [520, 920], u: [360, 800] };
-const SOFT = new Set(['s', 'f', 'h', 'c', 'x', 'z']);
-const HARD = new Set(['t', 'k', 'p', 'b', 'd', 'g', 'j', 'q']);
+export function setVoice(who, v) { PEOPLE[who] = { ...PEOPLE[who], ...v }; }
+
+const tts = typeof speechSynthesis !== 'undefined' ? speechSynthesis : null;
+const FEMALE = /female|woman|ezinne|zira|hazel|susan|libby|sonia|aria|jenny|samantha|karen|moira|tessa|fiona|victoria|serena|kate|leah|natasha|neerja|heera|clara|emma|ava|michelle|ada|aisha/i;
+const MALE = /\bmale\b|\bman\b|abeo|david|mark|george|ryan|guy|daniel|alex|fred|thomas|oliver|william|james|brian|liam|prabhat|ravi|rishi|arthur|eric/i;
+let voiceFor = { female: null, male: null };
+function chooseVoices() {
+  const all = (tts?.getVoices() ?? []).filter((v) => /^en[-_]/i.test(v.lang));
+  if (!all.length) return;
+  // Nigerian English first, then other African and British English, then any English
+  const rank = (v) => {
+    const l = v.lang.toLowerCase().replace('_', '-');
+    return l === 'en-ng' ? 0 : ['en-za', 'en-ke', 'en-gh', 'en-tz'].includes(l) ? 1 : l === 'en-gb' ? 2 : 3;
+  };
+  const pick = (female) => {
+    const fits = (v) => (female ? FEMALE.test(v.name) && !/\bmale\b/i.test(v.name.replace(/female/i, '')) : MALE.test(v.name) && !FEMALE.test(v.name));
+    // (natural-sounding online voices beat the old built-in ones)
+    const natural = (v) => (/natural|online|google|neural|premium|enhanced/i.test(v.name) ? 0 : 1);
+    const sorted = all.slice().sort((a, b) => rank(a) - rank(b) || natural(a) - natural(b));
+    return sorted.find(fits) ?? sorted.find((v) => !(female ? MALE : FEMALE).test(v.name)) ?? sorted[0];
+  };
+  voiceFor = { female: pick(true), male: pick(false) };
+}
+if (tts) {
+  chooseVoices();
+  tts.addEventListener?.('voiceschanged', chooseVoices);
+}
+// what to read: no emoji, and "Haha" said like a laugh
+const forSpeech = (text) => text.replace(/[\u{1F000}-\u{1FFFF}☀-➿]/gu, '').replace(/\bo\b(?=[.!?]?$)/i, 'oh').trim();
+
+let speaking = null; // { priority, until }
+function sayAloud(who, text, pos, priority) {
+  if (!tts || !voiceFor.male) return;
+  const now = performance.now();
+  // a lesson being read isn't cut off by a quick shout
+  if (speaking && now < speaking.until && speaking.priority > priority) return;
+  const p = PEOPLE[who] ?? { female: false, pitch: 1, rate: 1 };
+  const u = new SpeechSynthesisUtterance(forSpeech(text));
+  u.voice = p.female ? voiceFor.female : voiceFor.male;
+  u.lang = u.voice?.lang ?? 'en-GB';
+  u.pitch = p.pitch;
+  u.rate = p.rate;
+  // nearer is louder (speech voices can't be placed left or right, only made quieter)
+  const d = pos ? Math.hypot(pos.x - listenerAt.x, (pos.y ?? 1) - listenerAt.y, pos.z - listenerAt.z) : 1;
+  u.volume = Math.max(0.2, Math.min(1, 2.2 / (d + 0.8)));
+  const est = 600 + text.length * 70 / p.rate;
+  speaking = { priority, until: now + est };
+  u.onend = () => { if (speaking?.until === now + est) speaking = null; unduck(); };
+  tts.cancel();
+  tts.speak(u);
+  duck(est / 1000);
+}
+export function silence() { tts?.cancel(); speaking = null; }
+
 // Real recorded lines, if any have been added: assets/audio/voice/<who>__<line>.mp3, listed in
 // voice/voices.json (node tools/voices.mjs writes it). "any__pick-two.mp3" fits anybody.
-// A recording replaces the babble for that exact line; everything else is still babble.
-export const lineKey = (text) => text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+export const lineKey = (text) => text.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 const whoKey = (who) => lineKey(who === 'baba' ? 'baba' : who);
 let recorded = new Set();
 fetch(AUDIO + 'voice/voices.json').then((r) => (r.ok ? r.json() : [])).then((list) => { recorded = new Set(list); }).catch(() => {});
@@ -291,91 +341,26 @@ function recordedLine(who, text) {
   return null;
 }
 
-export function speak(who, text, pos, seconds) {
-  if (!ctx || muted || !text || tooFar(pos, 18)) return;
-  duck(seconds + 0.3);
+// priority: 2 for a lesson, 1 for everything else
+export function speak(who, text, pos, seconds, priority = 1) {
+  if (!ctx || muted || !text || tooFar(pos, 16)) return;
   const real = recordedLine(who, text);
-  if (real) {
-    const buf = buffers.get(real);
-    if (buf) {
-      const src = ctx.createBufferSource();
-      src.buffer = buf;
-      src.connect(pos ? placed(pos, { ref: 1.4, rolloff: 1.1 }) : master);
-      src.start();
-      return;
-    }
-    decode(real); // ready next time; babble this time
+  const buf = real && buffers.get(real);
+  if (buf) {
+    duck(buf.duration + 0.3);
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.connect(pos ? placed(pos, { ref: 1.4, rolloff: 1.1 }) : master);
+    src.start();
+    return;
   }
-  const v = VOICES[who] ?? { pitch: 150, pace: 1 };
-  const out = ctx.createGain();
-  out.gain.value = 0.8;
-  out.connect(pos ? placed(pos, { ref: 1.2, rolloff: 1.2 }) : master);
-  // the syllables: each run of vowels, with the consonant before it
-  const words = text.toLowerCase().normalize('NFD').replace(/[^a-z\s?!.,]/g, '').split(/\s+/);
-  const syl = [];
-  for (const w of words) {
-    const parts = w.match(/[^aeiou]*[aeiou]+/g) ?? (w.replace(/[^a-z]/g, '') ? [w] : []);
-    parts.forEach((p, i) => syl.push({ onset: p[0], vowel: (p.match(/[aeiou]/) ?? ['a'])[0], wordEnd: i === parts.length - 1, punct: /[.,!?]/.test(w) && i === parts.length - 1 }));
-  }
-  const asks = text.trim().endsWith('?');
-  const excited = text.includes('!');
-  let t = ctx.currentTime + 0.05;
-  const end = t + seconds;
-  syl.forEach((s, n) => {
-    if (t > end - 0.08) return;
-    const len = (0.075 + Math.random() * 0.05) / v.pace;
-    const last = n === syl.length - 1 || t + len * 2 > end;
-    // pitch: wanders a little, falls at the end of a statement, rises for a question
-    let f = v.pitch * (excited ? 1.12 : 1) * (1 + Math.sin(n * 1.7) * 0.06 + (Math.random() - 0.5) * 0.1);
-    if (last) f *= asks ? 1.25 : 0.82;
-    const src = ctx.createOscillator();
-    src.type = 'sawtooth';
-    src.frequency.setValueAtTime(f, t);
-    src.frequency.linearRampToValueAtTime(f * (last && asks ? 1.15 : 0.94), t + len);
-    const env = ctx.createGain();
-    env.gain.setValueAtTime(0.0001, t);
-    env.gain.exponentialRampToValueAtTime(1, t + 0.015);
-    env.gain.setValueAtTime(1, t + len * 0.6);
-    env.gain.exponentialRampToValueAtTime(0.0001, t + len);
-    const [f1, f2] = FORMANTS[s.vowel];
-    for (const [fq, q, g] of [[f1, 7, 1], [f2, 9, 0.6]]) {
-      const bp = ctx.createBiquadFilter();
-      bp.type = 'bandpass';
-      bp.frequency.value = fq * (v.pitch > 220 ? 1.15 : 1);
-      bp.Q.value = q;
-      const bg = ctx.createGain();
-      bg.gain.value = g * 3;
-      src.connect(bp).connect(bg).connect(env);
-    }
-    env.connect(out);
-    src.start(t);
-    src.stop(t + len + 0.02);
-    // a hiss or a tap for consonants like s, f, t, k
-    if (SOFT.has(s.onset) || HARD.has(s.onset)) {
-      const nz = ctx.createBufferSource();
-      nz.buffer = noiseBuffer();
-      const hp = ctx.createBiquadFilter();
-      hp.type = 'highpass';
-      hp.frequency.value = SOFT.has(s.onset) ? 4200 : 2000;
-      const ng = ctx.createGain();
-      const d = SOFT.has(s.onset) ? 0.05 : 0.015;
-      ng.gain.setValueAtTime(0.25, t - d * 0.5);
-      ng.gain.exponentialRampToValueAtTime(0.0001, t + d * 0.5);
-      nz.connect(hp).connect(ng).connect(out);
-      nz.start(Math.max(ctx.currentTime, t - d * 0.5));
-      nz.stop(t + d);
-    }
-    t += len + (s.punct ? 0.18 : s.wordEnd ? 0.05 : 0.012) / v.pace;
-  });
+  if (real) decode(real); // ready next time
+  sayAloud(who, text, pos, priority);
 }
-let noiseBuf = null;
-function noiseBuffer() {
-  if (!noiseBuf) {
-    noiseBuf = ctx.createBuffer(1, ctx.sampleRate * 0.1, ctx.sampleRate);
-    const d = noiseBuf.getChannelData(0);
-    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-  }
-  return noiseBuf;
+function unduck() {
+  if (!radioOut || !radioOn) return;
+  radioOut.gain.cancelScheduledValues(ctx.currentTime);
+  radioOut.gain.setTargetAtTime(0.55, ctx.currentTime + 0.3, 0.5);
 }
 
 // ── Life around the joint ──
@@ -396,6 +381,7 @@ export function toggleMute() {
   muted = !muted;
   try { localStorage.setItem('ayo-muted', muted ? '1' : '0'); } catch { /* storage blocked */ }
   if (master) master.gain.setTargetAtTime(muted ? 0 : VOLUME, ctx.currentTime, 0.05);
+  if (muted) silence();
   return muted;
 }
 
@@ -469,4 +455,4 @@ function level() {
   for (const v of meterBuf) sum += v * v;
   return Math.round(10 * Math.log10(sum / meterBuf.length + 1e-12));
 }
-export const audioStats = () => ({ level: level(),  state: ctx?.state ?? 'none', decoded: buffers.size, radio: radioOn, song: radioSrc?.buffer?.duration ?? 0, ambience: ambNow?.file ?? null, hum: !!hum });
+export const audioStats = () => ({ level: level(), voices: [voiceFor.male?.name, voiceFor.female?.name], speaking: !!tts?.speaking,  state: ctx?.state ?? 'none', decoded: buffers.size, radio: radioOn, song: radioSrc?.buffer?.duration ?? 0, ambience: ambNow?.file ?? null, hum: !!hum });

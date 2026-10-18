@@ -291,9 +291,9 @@ function speakerHead(who) {
   if (who === 'you') return me ? me.head.getWorldPosition(new THREE.Vector3()) : walker.pos.clone().setY(1.5);
   return regulars.find((r) => r.name === who)?.c.head.getWorldPosition(new THREE.Vector3()) ?? null;
 }
-function voice(who, text, seconds) {
-  if (who === 'you' && me) setVoice('you', { pitch: me.style?.body === 'female' ? 210 : 132 });
-  speak(who, text, speakerHead(who), seconds);
+function voice(who, text, seconds, priority = 1) {
+  if (who === 'you' && me) setVoice('you', { female: me.style?.body === 'female' });
+  speak(who, text, speakerHead(who), seconds, priority);
 }
 // whose speech bubble is showing, so their mouth moves (for about as long as it takes to say it)
 let talkUntil = 0;
@@ -335,7 +335,7 @@ function nextTip() {
   // long enough to read, then the next line (the last one lingers a little)
   const ms = THREE.MathUtils.clamp(line.length * 60, 3200, 9000);
   teaching.talkUntil = performance.now() + Math.min(ms, 400 + line.length * 55);
-  voice(teaching.who, line, Math.min(ms, 400 + line.length * 55) / 1000);
+  voice(teaching.who, line, Math.min(ms, 400 + line.length * 55) / 1000, 2);
   teaching.timer = setTimeout(nextTip, ms);
 }
 function stopTeaching() {
@@ -1683,7 +1683,7 @@ const GREETING = {
 };
 let okadaIn = 18 + Math.random() * 20;
 let roosterIn = 30 + Math.random() * 60;
-// The regulars play on among themselves: their sounds (and a bit of chat) come from their tables,
+// The regulars play on among themselves: their sounds come from their tables,
 // so the joint sounds busy and the nearer tables are louder.
 const TABLE_LIFE = {
   draughts: [['piece_place', 0.8], ['piece_place', 0.8], ['piece_slide', 0.7]],
@@ -1692,8 +1692,6 @@ const TABLE_LIFE = {
   snooker: [['cue_strike', 0.7], ['ball_hit', 0.8], ['ball_pocket', 0.6]],
   foosball: [['foos_kick', 0.8], ['foos_rattle', 0.6]],
 };
-const CHATTER = ['Ehen, na so!', 'Wait, wait first.', 'Oya now, play!', 'Haba! You see am?', 'I don tell you before.', 'This one na wa o.', 'Your turn!', 'Hmm. Let me think.'];
-const CHAT_VOICE = { draughts: ['Tunde'], whot: ['Iya Bisi', 'Uncle Femi', 'Mama Ngozi'], ludo: ['Kemi', 'Tobi'], snooker: ['Emeka'], foosball: ['Chidi'] };
 let lifeIn = 3;
 function tableLife(dt) {
   lifeIn -= dt;
@@ -1705,12 +1703,6 @@ function tableLife(dt) {
   const at = { x: t.center.x, y: (t.top ?? 0.8) + 0.05, z: t.center.z };
   const [name, volume] = TABLE_LIFE[id][Math.floor(Math.random() * TABLE_LIFE[id].length)];
   playSound(name, { pos: at, volume: volume * 0.8 });
-  if (Math.random() < 0.18 && $('bubble').hidden) {
-    const who = pickLine(CHAT_VOICE[id]);
-    const line = pickLine(CHATTER);
-    const head = speakerHead(who);
-    if (head) speak(who, line, head, 0.4 + line.length * 0.05);
-  }
 }
 let neighbourIn = 45 + Math.random() * 45;
 function stepStreet(dt) {

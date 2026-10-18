@@ -1,6 +1,6 @@
 # Lines to record (optional)
 
-Each file replaces the made-up babble for that exact line; every other line stays babble, so record as few or as many as you like.
+Each file replaces the computer voice for that exact line; every other line is still read by the device's voice, so record as few or as many as you like.
 
 1. Record each line as a short MP3, about 1–3 seconds, with no long silence at either end (mono is fine).
 2. Save it here in `assets/audio/voice/` with the exact filename shown.
