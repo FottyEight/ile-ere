@@ -2,6 +2,11 @@ import * as THREE from 'three';
 import { buildScene, onLoadProgress, pitCenter, storeCenter, seedSlot, storeSlot, BOARD_TOP, SEAT_Z } from './scene.js';
 import { buildCharacter, styleKey } from './character.js';
 import { SPAWN, VERANDAH, YARD } from './house.js';
+import { createFoosballTable } from './foosballTable.js';
+import { createWhotTable } from './whotTable.js';
+import { createSnookerTable } from './snookerTable.js';
+import { createDraughtsTable } from './draughtsTable.js';
+import { createLudoTable } from './ludoTable.js';
 import { newGame, play, legalMoves, chooseMove } from './ayo.js';
 import { whoami, saveRun, leaderboard, signIn, onStartNg, cameAsGuest, FALLBACK_GUEST } from './startng.js';
 import { unlock, sfx, toggleMute, isMuted, setAmbience, toggleRadio, radioPlaying, okada, cluck } from './sound.js';
@@ -151,7 +156,7 @@ refreshIdentity();
 addEventListener('focus', refreshIdentity);
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') refreshIdentity(); });
 
-const trySignIn = () => (onStartNg ? signIn() : say('Sign-in works on ayo.start.ng', 'you'));
+const trySignIn = () => (onStartNg ? signIn() : toast('Sign-in works when the game is played on start.ng', 2600));
 $('card-signin').onclick = trySignIn;
 $('menu-signin').onclick = trySignIn;
 $('over-signin').onclick = trySignIn;
@@ -217,9 +222,14 @@ function setMode(next) {
   document.body.dataset.mode = next;
   $('menu').hidden = next !== 'menu';
   $('over').hidden = next !== 'over';
-  $('hud').hidden = next === 'menu' || next === 'walk';
+  $('hud').hidden = !['playing', 'over'].includes(next);
   $('walk-hud').hidden = next !== 'walk';
+  $('table-menu').hidden = next !== 'tmenu';
+  $('table-over').hidden = next !== 'tover';
+  $('table-hud').hidden = next !== 'tplay' && next !== 'tover';
+  if (next !== 'tplay') $('table-actions').replaceChildren();
 }
+const atTable = () => mode === 'tmenu' || mode === 'tplay' || mode === 'tover';
 
 function renderLevels() {
   document.querySelectorAll('[data-level]').forEach((b) => b.setAttribute('aria-pressed', String(Number(b.dataset.level) === level)));
@@ -548,33 +558,27 @@ async function endGame() {
 
   const status = $('over-status');
   $('over-signin').hidden = true;
+  if (won && level > 0) countWin('ayo');
   if (identity.user) {
-    if (level === 0) {
-      status.textContent = 'Easy games don’t go on the leaderboard.';
-    } else {
-      status.textContent = 'Saving your game to start.ng…';
-      const saved = await saveRun({ streak, seeds: mine });
-      status.textContent = saved.ok
-        ? (saved.result.improved ? `New best! You're #${saved.result.rank}.` : `You're #${saved.result.rank} on the leaderboard.`)
-        : saved.error || 'Could not save your game.';
-    }
+    if (level === 0) status.textContent = 'Easy games don’t go on the leaderboard.';
+    else await saveWins(status);
   } else {
-    status.textContent = 'Sign in with start.ng to put your streak on the leaderboard.';
+    status.textContent = 'Sign in with start.ng to put your wins on the leaderboard.';
     $('over-signin').hidden = false;
   }
   renderBoard();
 }
 
-async function renderBoard() {
-  const list = $('board');
+// The joint's leaderboard: total wins, then wins per kind of game.
+async function renderBoard(list = $('board'), note = $('board-note')) {
   list.replaceChildren();
-  $('board-note').textContent = 'Loading leaderboard…';
+  note.textContent = 'Loading leaderboard…';
   const entries = await leaderboard(10);
   if (!entries) {
-    $('board-note').textContent = onStartNg ? 'Could not load the leaderboard.' : 'The leaderboard shows up when you play on ayo.start.ng.';
+    note.textContent = onStartNg ? 'Could not load the leaderboard.' : 'The leaderboard shows up when you play on start.ng.';
     return;
   }
-  $('board-note').textContent = entries.length ? '' : 'No games yet. Be the first!';
+  note.textContent = entries.length ? '' : 'No wins yet. Be the first!';
   for (const e of entries) {
     const li = document.createElement('li');
     if (identity.user && e.player_id === identity.user.id) li.classList.add('me');
@@ -586,8 +590,9 @@ async function renderBoard() {
     name.textContent = `${e.rank}. ${e.name}`;
     const score = document.createElement('span');
     score.className = 'score';
-    const wins = e.stats?.streak ?? e.score;
-    score.textContent = `${wins} ${wins === 1 ? 'win' : 'wins'} · ${e.stats?.seeds ?? 0} seeds`;
+    const wins = e.stats?.wins ?? e.score;
+    score.textContent = `${wins} ${wins === 1 ? 'win' : 'wins'}`;
+    score.title = e.stats ? `Ayo ${e.stats.ayo ?? 0} · Whot ${e.stats.whot ?? 0} · Draughts & Ludo ${e.stats.boards ?? 0} · Snooker & Football ${e.stats.cue ?? 0}` : '';
     li.append(dot, name, score);
     list.append(li);
   }
@@ -706,12 +711,24 @@ let yaw = VIEW.yaw;
 let pitch = VIEW.pitch;
 let dist = VIEW.dist;
 let drag = null;
+// at a table, its game gets first go at the pointer (aiming a cue, sliding rods, picking cards)
+const aimRay = (e) => {
+  pointer.set((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
+  raycaster.setFromCamera(pointer, camera);
+  return raycaster;
+};
+const tableWants = () => mode === 'tplay' && activeTable;
 renderer.domElement.addEventListener('pointerdown', (e) => {
   unlock();
-  drag = { x: e.clientX, y: e.clientY, moved: 0, id: e.pointerId };
+  const owned = tableWants() && activeTable.pointerDown?.(e, aimRay(e));
+  drag = { x: e.clientX, y: e.clientY, moved: 0, id: e.pointerId, owned: !!owned };
   renderer.domElement.setPointerCapture(e.pointerId);
 });
 renderer.domElement.addEventListener('pointermove', (e) => {
+  if (tableWants() && activeTable.pointerMove?.(e, aimRay(e), drag?.owned)) {
+    if (drag) { drag.moved += Math.abs(e.clientX - drag.x) + Math.abs(e.clientY - drag.y); drag.x = e.clientX; drag.y = e.clientY; }
+    return;
+  }
   if (drag && drag.id === e.pointerId) {
     const dx = e.clientX - drag.x;
     const dy = e.clientY - drag.y;
@@ -721,6 +738,10 @@ renderer.domElement.addEventListener('pointermove', (e) => {
         walkCam.yaw -= dx * 0.006;
         walkCam.pitch = THREE.MathUtils.clamp(walkCam.pitch + dy * 0.004, 0.05, 0.9);
         walkCam.dragged = 2.5; // stop the camera swinging back behind you for a moment
+      } else if (atTable() && activeTable) {
+        const v = activeTable.view;
+        yaw = THREE.MathUtils.clamp(yaw - dx * 0.005, v.yaw - 1.4, v.yaw + 1.4);
+        pitch = THREE.MathUtils.clamp(pitch + dy * 0.004, 0.2, v.maxPitch ?? 1.35);
       } else {
         yaw = THREE.MathUtils.clamp(yaw - dx * 0.005, -1.3, 1.5);
         pitch = THREE.MathUtils.clamp(pitch + dy * 0.004, 0.25, 1.25);
@@ -737,6 +758,11 @@ renderer.domElement.addEventListener('pointermove', (e) => {
 // preview, a second tap on the same pit plays it.
 let selected = -1;
 renderer.domElement.addEventListener('pointerup', (e) => {
+  if (tableWants()) {
+    activeTable.pointerUp?.(e, aimRay(e), { tap: !!drag && drag.moved <= 6, owned: !!drag?.owned });
+    drag = null;
+    return;
+  }
   if (drag && drag.id === e.pointerId && drag.moved <= 6 && mode === 'walk') {
     // tap or click to walk there; on a table, walk up to it
     pointer.set((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
@@ -770,6 +796,7 @@ renderer.domElement.addEventListener('pointerup', (e) => {
 });
 renderer.domElement.addEventListener('wheel', (e) => {
   if (mode === 'walk') walkCam.dist = THREE.MathUtils.clamp(walkCam.dist + e.deltaY * 0.002, 1.6, 5);
+  else if (atTable() && activeTable) dist = THREE.MathUtils.clamp(dist + e.deltaY * 0.0015, activeTable.view.dist * 0.5, activeTable.view.dist * (activeTable.view.maxPitch ? 1.15 : 1.8));
   else dist = THREE.MathUtils.clamp(dist + e.deltaY * 0.001, 0.9, 2.6);
 }, { passive: true });
 const held = new Set();
@@ -787,12 +814,23 @@ addEventListener('keydown', (e) => {
     } else if (k === 'm') $('mute').click();
     return;
   }
+  if (atTable()) {
+    if (k === 'm') $('mute').click();
+    else if (mode === 'tplay') activeTable?.keyDown?.(e, k);
+    else if (k === 'Enter') startTable();
+    else if (k === 'Escape') standUp();
+    return;
+  }
   if (e.key >= '1' && e.key <= '6') playerMove(Number(e.key) - 1);
   else if (k === 'm') $('mute').click();
   else if (e.key === 'Enter' && mode === 'menu') startGame();
   else if (e.key === 'Escape' && (mode === 'menu' || mode === 'over')) standUp();
 });
-addEventListener('keyup', (e) => held.delete(e.key.length === 1 ? e.key.toLowerCase() : e.key));
+addEventListener('keyup', (e) => {
+  const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+  held.delete(k);
+  if (mode === 'tplay') activeTable?.keyUp?.(e, k);
+});
 addEventListener('blur', () => held.clear());
 
 // ── Walking around the joint ──
@@ -966,18 +1004,19 @@ function useStation(s) {
     showPrompt(s);
     return;
   }
-  if (s.id === 'ayo') sitAtAyo();
+  sitAt(s);
 }
 
-// walk the last steps onto the stool, turn round and sit; then the Ayo menu opens
-function sitAtAyo() {
-  const s = stationById('ayo');
+// walk the last steps to the table, turn to face it and sit (or just stand, for snooker and
+// table football); then the table's menu opens
+let atStation = null; // the table you're at, once seated
+function sitAt(s) {
   held.clear();
   walker.target = null;
   nearStation = null;
   $('sit-prompt').hidden = true;
   $('walk-hud').hidden = true;
-  walker.seat = { from: walker.pos.clone(), fromHeading: walker.heading, to: s.seat.clone(), face: s.face, t: 0 };
+  walker.seat = { from: walker.pos.clone(), fromHeading: walker.heading, to: s.seat.clone(), face: s.face, t: 0, station: s };
 }
 function stepSitting(dt) {
   const st = walker.seat;
@@ -991,27 +1030,240 @@ function stepSitting(dt) {
   if (st.t >= 1) {
     walker.seat = null;
     walker.seated = true;
+    atStation = st.station;
     pose.me.cheer = 0;
-    setMode('menu');
-    renderLevels();
-    renderRecord();
-    say(pickLine(['Ah, you’ve come! Sit down, let’s play.', 'Welcome, omo mi. Ayo?', 'You’re back! Ready to lose? Haha!']), 'baba', 3200);
+    if (atStation.id === 'ayo') {
+      setMode('menu');
+      renderLevels();
+      renderRecord();
+      say(pickLine(['Ah, you’ve come! Sit down, let’s play.', 'Welcome, omo mi. Ayo?', 'You’re back! Ready to lose? Haha!']), 'baba', 3200);
+    } else {
+      openTable(atStation);
+    }
   }
 }
 function standUp() {
   if (busy) return;
-  const s = stationById('ayo');
+  const s = atStation ?? stationById('ayo');
+  if (activeTable) { activeTable.stop(); activeTable = null; }
   walker.seated = false;
+  atStation = null;
   walker.pos.copy(s.approach);
-  walker.heading = 0; // facing out to the courtyard
-  walkCam.yaw = Math.PI;
+  walker.heading = s.face + Math.PI; // turn away from the table
+  walkCam.yaw = s.face;
+  walkCam.dragged = 1;
   pose.me.cheer = 0;
   pose.baba.cheer = 0;
   setMode('walk');
-  say(pickLine(['Come back anytime!', 'Ó dàbọ̀! Don’t go far.', 'Go well, omo mi.']), 'baba', 2400);
+  if (s.id === 'ayo') say(pickLine(['Come back anytime!', 'Ó dàbọ̀! Don’t go far.', 'Go well, omo mi.']), 'baba', 2400);
+  else {
+    const host = regulars.find((r) => r.station === s.id);
+    if (host) say(pickLine(['Come back again o!', 'Next time, I go show you.', 'Safe! See you.']), host.name, 2400);
+  }
 }
 $('stand-up').onclick = standUp;
 $('over-leave').onclick = standUp;
+
+// ── The other tables ──
+// Each game (Draughts, Whot, Ludo, Snooker, Table football) lives in its own module and
+// plugs in here through `tableContext`. They share the table menu, HUD and end screen.
+const tableGames = {};
+let activeTable = null;
+const TABLE_LEVELS = ['Easy', 'Normal', 'Hard'];
+let tableLevel = 1;
+
+function tableContext(id) {
+  return {
+    THREE, scene, camera, raycaster, pointer,
+    info: house.tables[id],
+    station: stationById(id),
+    regular: (name) => regulars.find((r) => r.name === name),
+    me: () => me,
+    pose, // pose.me: your reach and grip
+    get speed() { return SPEED; },
+    get time() { return time; },
+    sfx, say, toast, wait, fly, pickLine,
+    turn: (text) => { $('table-turn').textContent = text; },
+    hint: (text) => { $('table-hint').textContent = text; },
+    // seats: [{ name, value, active }]
+    score: (seats) => {
+      $('table-score').replaceChildren(...seats.map((s) => {
+        const d = document.createElement('div');
+        d.className = `seat${s.active ? ' active' : ''}`;
+        d.innerHTML = `<small></small><b></b>`;
+        d.querySelector('small').textContent = s.name;
+        d.querySelector('b').textContent = String(s.value);
+        return d;
+      }));
+    },
+    // buttons over the table: [{ label, onClick, alt, disabled }]
+    actions: (list) => {
+      $('table-actions').replaceChildren(...list.map((a) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = a.label;
+        if (a.alt) b.className = 'alt';
+        b.disabled = !!a.disabled;
+        if (a.onClick) b.onclick = () => { unlock(); a.onClick(); };
+        // press-and-hold buttons (like charging a snooker shot)
+        if (a.onDown) {
+          b.addEventListener('pointerdown', (e) => { e.preventDefault(); unlock(); b.setPointerCapture(e.pointerId); a.onDown(); });
+          b.addEventListener('pointerup', () => a.onUp?.());
+          b.addEventListener('pointercancel', () => a.onUp?.());
+        }
+        return b;
+      }));
+    },
+    // move the table camera (it eases there); omitted values stay as they are
+    setView: ({ yaw: y, pitch: p, dist: d } = {}) => {
+      if (y !== undefined) yaw = y;
+      if (p !== undefined) pitch = p;
+      if (d !== undefined) dist = d;
+    },
+    // the game is over: { outcome: 'win'|'loss'|'draw', title, detail }
+    finish: (result) => finishTable(id, result),
+  };
+}
+
+function openTable(s) {
+  activeTable = tableGames[s.id];
+  const t = activeTable;
+  try { tableLevel = Math.min(2, Math.max(0, Number(localStorage.getItem(`joint-level-${s.id}`) ?? 1))); } catch { tableLevel = 1; }
+  $('table-kicker').textContent = `${s.name} with ${s.host}`;
+  $('table-title').textContent = t.title;
+  $('table-lead').textContent = t.lead;
+  $('table-level-label').textContent = t.levelLabel ?? 'How strong are they?';
+  $('table-rules').replaceChildren(...t.rules.map((r) => {
+    const li = document.createElement('li');
+    li.innerHTML = r;
+    return li;
+  }));
+  $('table-play').textContent = `Play ${t.title}`;
+  renderTableLevels();
+  renderTableRecord(s.id);
+  const v = t.view;
+  yaw = v.yaw;
+  pitch = v.pitch;
+  dist = v.dist;
+  t.idle?.();
+  setMode('tmenu');
+  const host = regulars.find((r) => r.station === s.id);
+  if (host) {
+    host.c.gesture('nod', 1.2);
+    say(pickLine(t.greetings), host.name, 3200);
+  }
+}
+function renderTableLevels() {
+  document.querySelectorAll('[data-tlevel]').forEach((b) => b.setAttribute('aria-pressed', String(Number(b.dataset.tlevel) === tableLevel)));
+}
+document.querySelectorAll('[data-tlevel]').forEach((b) => {
+  b.onclick = () => {
+    tableLevel = Number(b.dataset.tlevel);
+    try { localStorage.setItem(`joint-level-${atStation?.id}`, String(tableLevel)); } catch { /* storage blocked */ }
+    renderTableLevels();
+  };
+});
+function startTable() {
+  if (!activeTable) return;
+  unlock();
+  $('table-turn').textContent = '';
+  $('table-hint').textContent = '';
+  $('table-actions').replaceChildren();
+  setMode('tplay');
+  const v = activeTable.view;
+  yaw = v.yaw;
+  pitch = v.pitch;
+  dist = v.dist;
+  activeTable.start(tableLevel);
+}
+$('table-play').onclick = startTable;
+$('table-again').onclick = startTable;
+$('table-leave').onclick = standUp;
+$('table-over-leave').onclick = standUp;
+$('table-over-signin').onclick = () => trySignIn();
+
+// ── Records and the shared leaderboard ──
+// Each table keeps its own win/loss record per level. The start.ng leaderboard ranks players
+// by their total wins at the joint (Normal and Hard only), with a column per kind of game.
+function tableRecord(id) {
+  try {
+    const r = JSON.parse(localStorage.getItem(`joint-record-${id}`));
+    if (r?.length === 3) return r;
+  } catch { /* storage blocked */ }
+  return [{ w: 0, l: 0, d: 0 }, { w: 0, l: 0, d: 0 }, { w: 0, l: 0, d: 0 }];
+}
+function renderTableRecord(id) {
+  const rec = tableRecord(id);
+  const played = rec.some((r) => r.w + r.l + r.d > 0);
+  $('table-record').hidden = !played;
+  $('table-record-rows').replaceChildren(...rec.map((r, i) => {
+    const li = document.createElement('li');
+    li.innerHTML = `<span>${TABLE_LEVELS[i]}</span><b>${r.w}–${r.l}${r.d ? `–${r.d}` : ''}</b>`;
+    return li;
+  }));
+}
+function countWin(id) {
+  // wins on Normal and Hard, per game, for the leaderboard
+  let wins = {};
+  try { wins = JSON.parse(localStorage.getItem('joint-wins')) ?? {}; } catch { /* storage blocked */ }
+  wins[id] = (wins[id] ?? 0) + 1;
+  try { localStorage.setItem('joint-wins', JSON.stringify(wins)); } catch { /* storage blocked */ }
+  return wins;
+}
+function leaderboardStats() {
+  let w = {};
+  try { w = JSON.parse(localStorage.getItem('joint-wins')) ?? {}; } catch { /* storage blocked */ }
+  const n = (k) => w[k] ?? 0;
+  return {
+    wins: n('ayo') + n('draughts') + n('whot') + n('ludo') + n('snooker') + n('foosball'),
+    ayo: n('ayo'),
+    whot: n('whot'),
+    boards: n('draughts') + n('ludo'),
+    cue: n('snooker') + n('foosball'),
+  };
+}
+async function saveWins(statusEl) {
+  if (!identity.user) return;
+  statusEl.textContent = 'Saving to start.ng…';
+  const saved = await saveRun(leaderboardStats());
+  statusEl.textContent = saved.ok
+    ? (saved.result.improved ? `New best! You're #${saved.result.rank} at the joint.` : `You're #${saved.result.rank} on the leaderboard.`)
+    : saved.error || 'Could not save to start.ng.';
+}
+async function finishTable(id, result) {
+  setMode('tover');
+  const rec = tableRecord(id);
+  const r = rec[tableLevel];
+  if (result.outcome === 'win') r.w++;
+  else if (result.outcome === 'loss') r.l++;
+  else r.d++;
+  try { localStorage.setItem(`joint-record-${id}`, JSON.stringify(rec)); } catch { /* storage blocked */ }
+  pose.me.cheer = result.outcome === 'win' ? 1 : 0;
+  if (result.outcome === 'win') sfx.win(); else sfx.lose();
+  $('table-over-title').textContent = result.title;
+  $('table-over-detail').textContent = result.detail ?? '';
+  $('table-over-record').textContent = `Your record against ${TABLE_LEVELS[tableLevel]}: ${r.w}–${r.l}${r.d ? `–${r.d}` : ''}`;
+  const status = $('table-over-status');
+  $('table-over-signin').hidden = true;
+  if (result.outcome === 'win' && tableLevel > 0) countWin(id);
+  if (!identity.user) {
+    status.textContent = 'Sign in with start.ng to put your wins on the leaderboard.';
+    $('table-over-signin').hidden = false;
+  } else if (tableLevel === 0) {
+    status.textContent = 'Easy games don’t count on the leaderboard.';
+  } else {
+    await saveWins(status);
+  }
+  renderBoard($('table-board'), $('table-board-note'));
+}
+
+// the tables whose games are built
+tableGames.foosball = createFoosballTable(tableContext('foosball'));
+tableGames.whot = createWhotTable(tableContext('whot'));
+tableGames.snooker = createSnookerTable(tableContext('snooker'));
+tableGames.draughts = createDraughtsTable(tableContext('draughts'));
+tableGames.ludo = createLudoTable(tableContext('ludo'));
+for (const s of house.stations) s.ready = s.id === 'ayo' || !!tableGames[s.id];
 
 // ── Life on the verandah ──
 // Where people look: the pit being sown, the pit you're considering, each other when talking,
@@ -1069,6 +1321,9 @@ function looks(dt) {
       const l = lookToward(me, playerNode.rotation.y, headOf(speaker));
       if (Math.abs(l.yaw) < 1.4) meLook = l;
     }
+  } else if (me && atTable() && activeTable) {
+    const speaker = !$('bubble').hidden && regulars.find((r) => r.name === $('bubble').dataset.who)?.c;
+    meLook = lookToward(me, playerNode.rotation.y, speaker && mode !== 'tplay' ? headOf(speaker) : activeTable.focus?.() ?? activeTable.view.target);
   } else if (me && mode !== 'walk') {
     meLook = lookToward(me, playerNode.rotation.y, mt);
   }
@@ -1167,13 +1422,15 @@ function stepRegulars(dt) {
   const youNear = (r) => mode === 'walk' && Math.hypot(walker.pos.x - r.pos.x, walker.pos.z - r.pos.z) < 3.2;
   for (const r of regulars) {
     const table = stationById(r.station);
-    const target = youNear(r) && me ? headOf(me) : tmpV.copy(table.centre).setY(0.7);
+    const playingHere = atTable() && atStation?.id === r.station && activeTable;
+    let target = youNear(r) && me ? headOf(me) : tmpV.copy(table.centre).setY(0.7);
+    if (playingHere) target = r.lookAt ?? activeTable.focus?.() ?? activeTable.view.target;
     r.gestureIn -= dt;
-    if (r.gestureIn <= 0) {
+    if (r.gestureIn <= 0 && !(playingHere && mode === 'tplay')) {
       r.c.gesture(pickLine(r.standing ? ['nod', 'chin', 'laugh'] : ['nod', 'chin', 'laugh', 'chin']), 1.4 + Math.random());
       r.gestureIn = 5 + Math.random() * 10;
     }
-    r.c.animate(dt, { time: time + r.pos.x, seated: !r.standing, look: lookToward(r.c, r.c.root.rotation.y, target) });
+    r.c.animate(dt, { ...(r.pose ?? {}), time: time + r.pos.x, seated: !r.standing, look: lookToward(r.c, r.c.root.rotation.y, target) });
   }
 }
 const clock = new THREE.Clock();
@@ -1190,10 +1447,14 @@ function frame() {
     else stepWalker(dt);
     playerNode.position.copy(walker.pos);
     playerNode.rotation.y = walker.heading;
+  } else if (atTable() && atStation) {
+    playerNode.position.copy(atStation.seat);
+    playerNode.rotation.y = atStation.face;
   } else {
     playerNode.position.set(0, 0, SEAT_Z);
     playerNode.rotation.y = Math.PI;
   }
+  if (activeTable && mode === 'tplay') activeTable.update(dt, time);
 
   const tall = Math.max(0, 1 / camera.aspect - 1);
   if (mode === 'walk') {
@@ -1213,6 +1474,16 @@ function frame() {
     wantPos.copy(head).addScaledVector(dir, Math.max(0.6, d));
     if (wantPos.z < VERANDAH.front + 0.3) wantPos.y = Math.min(wantPos.y, 2.85); // under the roof
     wantLook.copy(head);
+  } else if (atTable() && activeTable) {
+    // at one of the other tables: its own view, which you can turn by dragging
+    const look = activeTable.view.target;
+    const d = dist * (1 + tall * (activeTable.view.maxPitch ? 0.1 : 0.3));
+    wantPos.set(
+      look.x + Math.sin(yaw) * Math.cos(pitch) * d,
+      look.y + Math.sin(pitch) * d,
+      look.z + Math.cos(yaw) * Math.cos(pitch) * d,
+    );
+    wantLook.copy(look);
   } else {
     // the menu slowly circles from your back to your face, framing both players
     const menu = mode === 'menu' && !cover;
@@ -1233,10 +1504,10 @@ function frame() {
     wantLook.copy(look);
   }
   // glide between the walking view and the table view; otherwise follow closely
-  const camGroup = mode === 'walk' ? 'walk' : 'table';
+  const camGroup = mode === 'walk' ? 'walk' : atTable() ? `table-${atStation?.id}` : 'ayo';
   if (camGroup !== lastCamGroup) { camEase = 1.4; lastCamGroup = camGroup; }
   camEase -= dt;
-  const ck = camEase > 0 ? 1 - Math.exp(-dt * 3.2) : mode === 'walk' ? 1 - Math.exp(-dt * 12) : 1;
+  const ck = camEase > 0 ? 1 - Math.exp(-dt * 3.2) : mode === 'walk' ? 1 - Math.exp(-dt * 12) : atTable() ? 1 - Math.exp(-dt * 8) : 1;
   if (!camReady || mode === 'cover') { camPos.copy(wantPos); camLook.copy(wantLook); camReady = true; }
   camPos.lerp(wantPos, ck);
   camLook.lerp(wantLook, ck);
@@ -1244,6 +1515,19 @@ function frame() {
   camera.lookAt(camLook);
   // hide a lantern when the camera is right up against it
   for (const o of house.occluders) o.visible = o.position.distanceTo(camPos) > 0.8;
+  // while you play at a table, don't let your own character block the view of the game
+  if (me) {
+    let blocking = false;
+    if (mode === 'tplay' && activeTable) {
+      const head = headOf(me);
+      const focus = activeTable.focus?.() ?? activeTable.view.target;
+      const seg = tmpDir.subVectors(focus, camPos);
+      const t = THREE.MathUtils.clamp(tmpCam.subVectors(head, camPos).dot(seg) / seg.lengthSq(), 0, 1);
+      const nearest = camPos.clone().addScaledVector(seg, t);
+      blocking = head.distanceTo(nearest) < 0.45 || head.distanceTo(camPos) < 0.9;
+    }
+    me.root.visible = !blocking;
+  }
   // full detail (fingers, eyes) only for people near the camera
   for (const person of [me, baba, ...regulars.map((r) => r.c)]) {
     if (person) person.setDetail(person.root.getWorldPosition(tmpV).distanceTo(camPos) < 4.5);
@@ -1254,7 +1538,9 @@ function frame() {
   if (me) {
     me.animate(dt, {
       ...pose.me, time, leanIn: mode === 'cover' ? 1 : 0.35, look: gaze.me,
-      seated: mode !== 'walk' || (walker.seat && walker.seat.t > 0.45),
+      seated: atTable()
+        ? !atStation?.standing
+        : mode !== 'walk' || (walker.seat && walker.seat.t > 0.45 && !walker.seat.station.standing),
       walk: mode === 'walk' ? walker.speed : 0,
     });
   }
@@ -1348,6 +1634,15 @@ if (params.has('debug')) {
     sit: () => { walker.pos.copy(stationById('ayo').seat); walker.seat = null; setMode('menu'); },
     standUp,
     regulars,
+    get activeTable() { return activeTable; },
+    tableGames,
+    // the active table's focus point on screen, for tests
+    activeFocus: () => {
+      const f = activeTable?.focus?.();
+      if (!f) return null;
+      f.project(camera);
+      return { x: (f.x * 0.5 + 0.5) * innerWidth, y: (-f.y * 0.5 + 0.5) * innerHeight };
+    },
     screenOf: (i) => {
       const v = pitCenter(i).project(camera);
       return { x: (v.x * 0.5 + 0.5) * innerWidth, y: (-v.y * 0.5 + 0.5) * innerHeight };

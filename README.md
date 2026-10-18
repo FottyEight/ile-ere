@@ -2,7 +2,20 @@
 
 A Lagos game house you walk into as your own start.ng character. Tables line the verandah and the courtyard: **Ayo** with Baba, **Draughts** with Tunde the barber, **Whot** with Iya Bisi and friends, **Ludo** with Kemi and Tobi, **Snooker** with Emeka and **Table football** with Chidi. Walk up to a table and sit down to play. A three.js game for [start.ng](https://start.ng).
 
-**Open now:** Ayo. The other tables are set up with their regulars and open one by one.
+**Every table is playable**, each with Easy, Normal and Hard opponents:
+
+| Table | Who you play | Rules |
+|---|---|---|
+| Ayo | Baba | Ayò Olópón: captures on 2 or 3, first to 25 seeds (`src/ayo.js`) |
+| Draughts | Tunde the barber | International 10×10: compulsory maximum capture, men capture backwards, flying kings (`src/draughts.js`) |
+| Whot | Iya Bisi, Uncle Femi, Mama Ngozi | Nigerian Whot: Hold on, Pick two, Pick three, Suspension, General market, Whot calls (`src/whot.js`) |
+| Ludo | Kemi and Tobi | One die, 6 to come out, captures, stars, blocks (`src/ludo.js`) |
+| Snooker | Emeka | One frame on a bar-size table, with real ball physics, fouls and re-spotting (`src/snooker.js`) |
+| Table football | Chidi | Four rods each (1-2-5-3), first to 5 goals (`src/foosball.js`) |
+
+Each rules engine has its own tests in `tools/` (`node tools/<game>.test.mjs`). The computer players for Draughts and Snooker think in a background worker (`src/aiWorker.js`) so the table keeps moving.
+
+The start.ng leaderboard ranks players by their total wins at the joint on Normal and Hard, with columns for Ayo, Whot, Draughts & Ludo, and Snooker & Football.
 
 Walking: WASD or arrow keys (Shift to hurry), drag to look around, or tap the floor or a table to walk there. Next to a table, press E or tap the button to sit down.
 

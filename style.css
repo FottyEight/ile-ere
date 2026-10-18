@@ -62,6 +62,20 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .skip { position: absolute; right: 16px; bottom: 18px; pointer-events: auto; border: 1px solid var(--edge); border-radius: 999px;
   padding: 7px 14px; background: var(--panel); font-weight: 700; font-size: 13px; }
 .spaced { margin-top: 14px; }
+/* the other tables */
+#table-menu, #table-over { place-items: center end; }
+#table-over { place-items: center; }
+.rules.compact { margin: 12px 0 0; font-size: 13px; gap: 4px; }
+.table-actions { position: absolute; left: 50%; bottom: 104px; transform: translateX(-50%); display: flex; gap: 8px; pointer-events: auto; }
+.table-actions button { border: 0; border-radius: 999px; padding: 11px 18px; background: var(--accent); color: #1f2a12; font-weight: 800; font-size: 15px;
+  box-shadow: 0 8px 22px rgba(0,0,0,.35); white-space: nowrap; }
+.table-actions button.alt { background: var(--panel); color: var(--ink); border: 1px solid var(--edge); }
+.table-actions button:disabled { opacity: .45; cursor: default; }
+.scoreboard .seat { text-align: center; min-width: 56px; }
+.scoreboard .seat.active b { color: var(--gold); }
+.scoreboard .seat.active small { color: var(--gold); }
+@media (max-width: 640px) { .table-actions { bottom: 92px; flex-wrap: wrap; justify-content: center; width: 94vw; } }
+
 /* walking about the joint */
 .walk-hud { position: fixed; inset: 0; z-index: 4; pointer-events: none; }
 .walk-hud .hint { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); margin: 0; font-size: 13px; color: var(--dim);

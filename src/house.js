@@ -29,6 +29,7 @@ export function buildHouse(scene, add) {
   const block = (cx, cz, w, d) => colliders.push({ minX: cx - w / 2, maxX: cx + w / 2, minZ: cz - d / 2, maxZ: cz + d / 2 });
   const nightLights = [];
   const occluders = []; // small hanging things the camera might pass through (hidden when it does)
+  const tables = {}; // where each game's playing surface is, for the table games to put their pieces on
   const glowMats = [];
 
   // ── Materials ──
@@ -191,14 +192,8 @@ export function buildHouse(scene, add) {
     const size = 0.46;
     add(new THREE.BoxGeometry(size + 0.04, 0.03, size + 0.04), woodDark, DRAUGHTS.x, top + 0.015, DRAUGHTS.z);
     add(new THREE.PlaneGeometry(size, size).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ map: boardTex, roughness: 0.5 }), DRAUGHTS.x, top + 0.031, DRAUGHTS.z, { cast: false });
-    const pieceGeo = new THREE.CylinderGeometry(0.019, 0.019, 0.009, 20);
-    const white = new THREE.MeshStandardMaterial({ color: '#f1ead9', roughness: 0.35 });
-    const black = new THREE.MeshStandardMaterial({ color: '#1c1715', roughness: 0.35 });
-    const s = size / 10;
-    for (let r = 0; r < 10; r++) for (let c = 0; c < 10; c++) {
-      if ((r + c) % 2 === 0 || (r > 3 && r < 6)) continue;
-      add(pieceGeo, r < 4 ? black : white, DRAUGHTS.x - size / 2 + (c + 0.5) * s, top + 0.036, DRAUGHTS.z - size / 2 + (r + 0.5) * s);
-    }
+    // (the pieces belong to the draughts game, in draughtsTable.js)
+    tables.draughts = { center: DRAUGHTS.clone(), top: top + 0.031, size };
     block(DRAUGHTS.x, DRAUGHTS.z, 0.7, 0.7);
     stool(DRAUGHTS.x, DRAUGHTS.z + 0.72);
     stool(DRAUGHTS.x, DRAUGHTS.z - 0.72);
@@ -212,33 +207,8 @@ export function buildHouse(scene, add) {
     add(new THREE.CylinderGeometry(0.46, 0.46, 0.04, 32), woodLight, WHOT.x, top - 0.02, WHOT.z);
     add(new THREE.CylinderGeometry(0.05, 0.07, top - 0.04, 12), woodLight, WHOT.x, (top - 0.04) / 2, WHOT.z);
     add(new THREE.CylinderGeometry(0.25, 0.25, 0.03, 24), woodLight, WHOT.x, 0.015, WHOT.z);
-    const back = canvasTexture(128, 192, (g, w, h) => {
-      g.fillStyle = '#7a1f2b';
-      g.fillRect(0, 0, w, h);
-      g.strokeStyle = '#f2c14e';
-      g.lineWidth = 6;
-      g.strokeRect(8, 8, w - 16, h - 16);
-      g.fillStyle = '#f2c14e';
-      g.font = 'bold 34px Arial';
-      g.textAlign = 'center';
-      g.fillText('WHOT', w / 2, h / 2 + 12);
-    });
-    const face = canvasTexture(128, 192, (g, w, h) => {
-      g.fillStyle = '#fbf6ec';
-      g.fillRect(0, 0, w, h);
-      g.fillStyle = '#7a1f2b';
-      g.beginPath();
-      g.arc(w / 2, h / 2, 32, 0, Math.PI * 2);
-      g.fill();
-      g.font = 'bold 30px Arial';
-      g.fillText('5', 14, 34);
-    });
-    const cardGeo = new THREE.BoxGeometry(0.06, 0.002, 0.09);
-    const edge = new THREE.MeshStandardMaterial({ color: '#f5efe2' });
-    const cardBack = [edge, edge, new THREE.MeshStandardMaterial({ map: back, roughness: 0.6 }), edge, edge, edge];
-    const cardFace = [edge, edge, new THREE.MeshStandardMaterial({ map: face, roughness: 0.6 }), edge, edge, edge];
-    for (let i = 0; i < 6; i++) add(cardGeo, cardBack, WHOT.x - 0.06, top + 0.002 + i * 0.002, WHOT.z, { cast: false });
-    add(cardGeo, cardFace, WHOT.x + 0.06, top + 0.003, WHOT.z, { cast: false }).rotation.y = 0.2;
+    // (the cards belong to the Whot game, in whotTable.js)
+    tables.whot = { center: WHOT.clone(), top };
     block(WHOT.x, WHOT.z, 0.95, 0.95);
     stool(WHOT.x, WHOT.z + 0.82);
     stool(WHOT.x, WHOT.z - 0.82);
@@ -296,17 +266,8 @@ export function buildHouse(scene, add) {
     });
     add(new THREE.BoxGeometry(0.52, 0.012, 0.52), woodDark, LUDO.x, top + 0.006, LUDO.z);
     add(new THREE.PlaneGeometry(0.5, 0.5).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ map: ludoTex, roughness: 0.6 }), LUDO.x, top + 0.013, LUDO.z, { cast: false });
-    const die = new THREE.MeshStandardMaterial({ color: '#fbf6ec', roughness: 0.3 });
-    add(new THREE.BoxGeometry(0.022, 0.022, 0.022), die, LUDO.x + 0.3, top + 0.011, LUDO.z + 0.05).rotation.y = 0.4;
-    const tokenGeo = new THREE.CylinderGeometry(0.008, 0.012, 0.03, 12);
-    const tokenColors = ['#d63031', '#00a65a', '#f5b700', '#1e6fd9'];
-    const home = [[-1, -1], [1, -1], [1, 1], [-1, 1]];
-    tokenColors.forEach((col, k) => {
-      const mat = new THREE.MeshStandardMaterial({ color: col, roughness: 0.3 });
-      for (const [ox, oz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
-        add(tokenGeo, mat, LUDO.x + home[k][0] * 0.167 + ox * 0.033, top + 0.028, LUDO.z + home[k][1] * 0.167 + oz * 0.033);
-      }
-    });
+    // (the tokens and die belong to the Ludo game, in ludoTable.js)
+    tables.ludo = { center: LUDO.clone(), top: top + 0.013, size: 0.5 };
     block(LUDO.x, LUDO.z, 0.8, 0.8);
     stool(LUDO.x, LUDO.z + 0.8);
     stool(LUDO.x, LUDO.z - 0.8);
@@ -334,17 +295,8 @@ export function buildHouse(scene, add) {
     for (const px of [-1, 0, 1]) for (const pz of [-1, 1]) {
       add(new THREE.CylinderGeometry(0.05, 0.05, 0.02, 16), pocket, SNOOKER.x + px * (L / 2 - 0.02), h + 0.002, SNOOKER.z + pz * (W / 2 - 0.02), { cast: false });
     }
-    const ball = new THREE.SphereGeometry(0.026, 16, 12);
-    const red = new THREE.MeshPhysicalMaterial({ color: '#b3121c', roughness: 0.15, clearcoat: 1 });
-    let n = 0;
-    for (let row = 0; row < 5; row++) for (let i = 0; i <= row; i++) {
-      add(ball, red, SNOOKER.x + 0.62 + row * 0.046, h + 0.026, SNOOKER.z + (i - row / 2) * 0.054);
-      n++;
-    }
-    const colours = [['#f5d300', -0.75, -0.3], ['#2a8f3a', -0.75, 0.3], ['#7a4a22', -0.75, 0], ['#1e5bc6', 0, 0], ['#ef6fa6', 0.56, 0], ['#111111', 1.05, 0], ['#f7f3ea', -0.95, 0.12]];
-    for (const [col, ox, oz] of colours) add(ball, new THREE.MeshPhysicalMaterial({ color: col, roughness: 0.15, clearcoat: 1 }), SNOOKER.x + ox, h + 0.026, SNOOKER.z + oz);
-    const cue = add(new THREE.CylinderGeometry(0.006, 0.014, 1.45, 10), woodLight, SNOOKER.x - 0.3, h + 0.05, SNOOKER.z + W / 2 + 0.06);
-    cue.rotation.z = Math.PI / 2;
+    // (the balls and cue belong to the snooker game, in snookerTable.js)
+    tables.snooker = { center: SNOOKER.clone(), top: h, L, W };
     block(SNOOKER.x, SNOOKER.z, L + 0.3, W + 0.3);
     // canopy: four poles and a corrugated zinc roof
     for (const px of [-1, 1]) for (const pz of [-1, 1]) {
@@ -372,22 +324,29 @@ export function buildHouse(scene, add) {
     const L = 1.2;
     const W = 0.7;
     const h = 0.86;
+    // an open cabinet: the pitch sits 12 cm down inside four walls
     const body = new THREE.MeshStandardMaterial({ color: '#2b3a67', roughness: 0.6 });
-    add(new THREE.BoxGeometry(L, 0.3, W), body, FOOS.x, h - 0.15, FOOS.z);
-    add(new THREE.BoxGeometry(L - 0.08, 0.01, W - 0.08), new THREE.MeshStandardMaterial({ color: '#1f8a4c', roughness: 0.8 }), FOOS.x, h - 0.08, FOOS.z);
-    for (const lx of [-1, 1]) for (const lz of [-1, 1]) {
-      add(new THREE.BoxGeometry(0.07, h - 0.3, 0.07), body, FOOS.x + lx * (L / 2 - 0.05), (h - 0.3) / 2, FOOS.z + lz * (W / 2 - 0.05));
-    }
-    const rod = new THREE.MeshStandardMaterial({ color: '#c9ccd0', metalness: 0.9, roughness: 0.25 });
-    const teams = [new THREE.MeshStandardMaterial({ color: '#d63031' }), new THREE.MeshStandardMaterial({ color: '#f5f5f5' })];
-    for (let i = 0; i < 8; i++) {
-      const x = FOOS.x - L / 2 + 0.1 + i * ((L - 0.2) / 7);
-      add(new THREE.CylinderGeometry(0.008, 0.008, W + 0.3, 8), rod, x, h - 0.02, FOOS.z).rotation.x = Math.PI / 2;
-      const men = [1, 2, 3, 3, 3, 3, 2, 1][i];
-      for (let m = 0; m < men; m++) {
-        add(new THREE.BoxGeometry(0.02, 0.07, 0.025), teams[i % 2], x, h - 0.05, FOOS.z + (m - (men - 1) / 2) * 0.14);
+    const pitchY = h - 0.12;
+    const wallT = 0.04;
+    add(new THREE.BoxGeometry(L, 0.18, W), body, FOOS.x, pitchY - 0.09, FOOS.z); // underside
+    add(new THREE.BoxGeometry(L - 2 * wallT, 0.004, W - 2 * wallT), new THREE.MeshStandardMaterial({ color: '#1f8a4c', roughness: 0.8 }), FOOS.x, pitchY + 0.002, FOOS.z, { cast: false });
+    for (const e of [-1, 1]) {
+      add(new THREE.BoxGeometry(L, 0.12, wallT), body, FOOS.x, pitchY + 0.06, FOOS.z + e * (W / 2 - wallT / 2)); // long sides
+      // end walls with a goal mouth in the middle
+      const sideLen = (W - 2 * wallT - 0.2) / 2;
+      for (const s of [-1, 1]) {
+        add(new THREE.BoxGeometry(wallT, 0.12, sideLen), body, FOOS.x + e * (L / 2 - wallT / 2), pitchY + 0.06, FOOS.z + s * (0.1 + sideLen / 2));
       }
+      add(new THREE.BoxGeometry(wallT, 0.06, 0.2), body, FOOS.x + e * (L / 2 - wallT / 2), pitchY + 0.09, FOOS.z); // crossbar
     }
+    const line = new THREE.MeshBasicMaterial({ color: '#e8f5e9' });
+    add(new THREE.BoxGeometry(0.004, 0.001, W - 2 * wallT), line, FOOS.x, pitchY + 0.005, FOOS.z, { cast: false, receive: false });
+    add(new THREE.RingGeometry(0.07, 0.074, 32).rotateX(-Math.PI / 2), line, FOOS.x, pitchY + 0.005, FOOS.z, { cast: false, receive: false });
+    for (const lx of [-1, 1]) for (const lz of [-1, 1]) {
+      add(new THREE.BoxGeometry(0.07, pitchY - 0.18, 0.07), body, FOOS.x + lx * (L / 2 - 0.05), (pitchY - 0.18) / 2, FOOS.z + lz * (W / 2 - 0.05));
+    }
+    // (the rods, players and ball belong to the table-football game, in foosballTable.js)
+    tables.foosball = { center: FOOS.clone(), top: pitchY + 0.004, L: L - 2 * wallT, W: W - 2 * wallT, rodY: h - 0.02, goalW: 0.2 };
     block(FOOS.x, FOOS.z, L + 0.2, W + 0.5);
   }
 
@@ -443,5 +402,5 @@ export function buildHouse(scene, add) {
       style: { body: 'male', primaryColor: '#f2f2f0', secondaryColor: '#1e3a6b', skinColor: '#7a4a2a', hairColor: '#17120f', hair: 'afro', hat: 'none', accessory: 'none' } },
   ];
 
-  return { colliders, stations, regulars, setNight, occluders };
+  return { colliders, stations, regulars, setNight, occluders, tables };
 }

@@ -1,8 +1,11 @@
 {
   "leaderboard": {
     "stats": [
-      { "key": "streak", "label": "Win streak vs Baba", "order": "highest" },
-      { "key": "seeds", "label": "Seeds captured", "order": "highest" }
+      { "key": "wins", "label": "Wins at the joint", "order": "highest" },
+      { "key": "ayo", "label": "Ayo", "order": "highest" },
+      { "key": "whot", "label": "Whot", "order": "highest" },
+      { "key": "boards", "label": "Draughts & Ludo", "order": "highest" },
+      { "key": "cue", "label": "Snooker & Football", "order": "highest" }
     ]
   }
 }

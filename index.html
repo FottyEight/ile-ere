@@ -99,11 +99,56 @@
     </blockquote>
     <p class="status" id="over-status"></p>
     <button class="secondary" id="over-signin" type="button" hidden>Sign in with start.ng</button>
-    <h3>Leaderboard: longest win streaks</h3>
+    <h3>Leaderboard: most wins at the joint</h3>
     <ol class="board" id="board"></ol>
     <p class="note" id="board-note"></p>
     <button class="big" id="again" type="button">Play again</button>
     <button class="secondary wide" id="over-leave" type="button">Leave the table</button>
+  </div>
+</section>
+
+<!-- The other tables (Draughts, Whot, Ludo, Snooker, Table football) share this menu, HUD and end screen -->
+<div class="hud" id="table-hud" hidden>
+  <div class="scoreboard" id="table-score"></div>
+  <div class="table-actions" id="table-actions"></div>
+  <p class="turn" id="table-turn"></p>
+  <p class="hint" id="table-hint"></p>
+</div>
+
+<section class="screen" id="table-menu" hidden>
+  <div class="panel">
+    <p class="kicker" id="table-kicker">Baba's Joint</p>
+    <h1 id="table-title">Draughts</h1>
+    <p class="lead" id="table-lead"></p>
+    <p class="label" id="table-level-label">How strong are they?</p>
+    <div class="levels" role="group" aria-label="Difficulty">
+      <button type="button" data-tlevel="0">Easy</button>
+      <button type="button" data-tlevel="1">Normal</button>
+      <button type="button" data-tlevel="2">Hard</button>
+    </div>
+    <p class="note" id="table-level-note">Wins on Normal and Hard count on the leaderboard.</p>
+    <div class="record" id="table-record" hidden>
+      <p class="label">Your record at this table</p>
+      <ul id="table-record-rows"></ul>
+    </div>
+    <ul class="rules compact" id="table-rules"></ul>
+    <button class="big" id="table-play" type="button">Play</button>
+    <button class="secondary wide" id="table-leave" type="button">Stand up and look around</button>
+  </div>
+</section>
+
+<section class="screen" id="table-over" hidden>
+  <div class="panel">
+    <h2 id="table-over-title">You win!</h2>
+    <p class="streak" id="table-over-detail"></p>
+    <p class="note" id="table-over-record"></p>
+    <p class="status" id="table-over-status"></p>
+    <button class="secondary" id="table-over-signin" type="button" hidden>Sign in with start.ng</button>
+    <h3>Leaderboard: most wins at the joint</h3>
+    <ol class="board" id="table-board"></ol>
+    <p class="note" id="table-board-note"></p>
+    <button class="big" id="table-again" type="button">Play again</button>
+    <button class="secondary wide" id="table-over-leave" type="button">Leave the table</button>
   </div>
 </section>
 
