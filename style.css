@@ -212,5 +212,6 @@ h3 { margin: 18px 0 8px; font-size: 13px; letter-spacing: .08em; text-transform:
 body.cover .card, body.cover .corner, body.cover .screen, body.cover .hud, body.cover #counts, body.cover .bubble { display: none !important; }
 .cover-title { display: none; }
 body.cover .cover-title { display: block; position: fixed; right: 5%; bottom: 6%; z-index: 7; text-align: right; }
-.cover-title h1 { font-size: 112px; margin: 0; text-shadow: 0 8px 30px rgba(0,0,0,.5); }
-.cover-title p { margin: 0 0 0 6px; font-size: 38px; font-weight: 800; color: var(--accent); text-shadow: 0 4px 16px rgba(0,0,0,.6); }
+.cover-title h1 { font-family: Georgia, 'Times New Roman', serif; font-size: 120px; line-height: 1; margin: 0; text-shadow: 0 8px 30px rgba(0,0,0,.5); }
+.cover-title p { margin: 6px 0 0; font-family: Georgia, 'Times New Roman', serif; font-style: italic; font-size: 44px; color: var(--gold); text-shadow: 0 4px 16px rgba(0,0,0,.6); }
+.cover-title small { display: block; margin-top: 4px; font-size: 26px; font-weight: 800; color: var(--ink); text-shadow: 0 3px 12px rgba(0,0,0,.7); }

@@ -1,4 +1,4 @@
-// "How to play" guides for Baba's Joint: the joint itself and each of the six tables.
+// "How to play" guides for Ilé Eré: the house itself and each of the six tables.
 // Plain data plus small inline SVG diagrams (built once, below). No DOM, no dependencies.
 //
 //   GUIDES[id]   = { title, intro, sections: [{ heading, html, diagram? }] }
@@ -363,8 +363,8 @@ const JOINT_KEYS = (() => {
 // ── Guides ──
 export const GUIDES = {
   joint: {
-    title: 'Getting around Baba’s Joint',
-    intro: 'Welcome to Baba’s Joint, a Lagos game house. Walk around as your own character, sit at any of the six tables and play the regulars.',
+    title: 'Getting around Ilé Eré',
+    intro: 'Welcome to Ilé Eré, the House of Play: a Lagos game house. Walk around as your own character, sit at any of the six tables and play the regulars.',
     sections: [
       {
         heading: 'Walking',
@@ -377,11 +377,11 @@ export const GUIDES = {
       },
       {
         heading: 'Finding a table quickly',
-        html: '<ul><li>Tap the <b>☰</b> button (top right) for a list of all six tables. Tap one and you walk straight there and sit down.</li><li>The <b>mini-map</b> in the bottom corner shows the whole joint (tap <b>Map</b> to open it). Tap a table on it to go there, or anywhere else to walk there.</li><li>New here? Tap <b>☰</b>, then <b>Show me around</b>, and Baba sends you round every table.</li></ul>',
+        html: '<ul><li>Tap the <b>☰</b> button (top right) for a list of all six tables. Tap one and you walk straight there and sit down.</li><li>The <b>mini-map</b> in the bottom corner shows the whole house (tap <b>Map</b> to open it). Tap a table on it to go there, or anywhere else to walk there.</li><li>New here? Tap <b>☰</b>, then <b>Show me around</b>, and Baba sends you round every table.</li></ul>',
       },
       {
         heading: 'Who plays where',
-        html: '<ul><li><b>Ayo</b> with Baba, the elder of the joint</li><li><b>Draughts</b> with Tunde the barber</li><li><b>Whot</b> with Iya Bisi, Uncle Femi and Mama Ngozi</li><li><b>Ludo</b> with the kids, Kemi and Tobi</li><li><b>Snooker</b> with Emeka</li><li><b>Table football</b> with Chidi</li></ul>',
+        html: '<ul><li><b>Ayo</b> with Baba, the elder of the house</li><li><b>Draughts</b> with Tunde the barber</li><li><b>Whot</b> with Iya Bisi, Uncle Femi and Mama Ngozi</li><li><b>Ludo</b> with the kids, Kemi and Tobi</li><li><b>Snooker</b> with Emeka</li><li><b>Table football</b> with Chidi</li></ul>',
       },
       {
         heading: 'Leaving a table',
@@ -393,11 +393,11 @@ export const GUIDES = {
       },
       {
         heading: 'The leaderboard',
-        html: '<p>Every win on <b>Normal</b> or <b>Hard</b>, at any table, counts towards your total wins at the joint. <b>Sign in with start.ng</b> to put your wins on the leaderboard and play as your own character. Guests can play everything, but their wins stay on this device.</p>',
+        html: '<p>Every win on <b>Normal</b> or <b>Hard</b>, at any table, counts towards your total wins at Ilé Eré. <b>Sign in with start.ng</b> to put your wins on the leaderboard and play as your own character. Guests can play everything, but their wins stay on this device.</p>',
       },
       {
         heading: 'Day, evening and night',
-        html: '<p>The joint follows your clock. It’s daytime until 4 pm, evening until 7 pm, then night: NEPA has taken light, so the lanterns are lit and the chickens have gone to roost.</p>',
+        html: '<p>The house follows your clock. It’s daytime until 4 pm, evening until 7 pm, then night: NEPA has taken light, so the lanterns are lit and the chickens have gone to roost.</p>',
       },
       {
         heading: 'Music and sound',

@@ -47,8 +47,8 @@ const timeOfDay = ['day', 'evening', 'night'].includes(params.get('time'))
 setTimeOfDay(timeOfDay);
 setAmbience(timeOfDay);
 $('lead-time').textContent = {
-  day: 'It’s a quiet afternoon at the joint.',
-  evening: 'The sun is going down over the joint.',
+  day: 'It’s a quiet afternoon on the verandah.',
+  evening: 'The sun is going down over the courtyard.',
   night: 'NEPA has taken light, so the lanterns are lit.',
 }[timeOfDay];
 if (timeOfDay === 'night') chickens.forEach((c) => { c.visible = false; }); // gone to roost
@@ -82,7 +82,7 @@ scene.add(baba.root);
 
 const playerNode = new THREE.Group();
 playerNode.position.copy(SPAWN);
-playerNode.rotation.y = Math.PI; // facing into the joint
+playerNode.rotation.y = Math.PI; // facing into the house
 scene.add(playerNode);
 let me = null;
 let meKey = '';
@@ -680,7 +680,7 @@ $('mute').onclick = () => { unlock(); $('mute').textContent = toggleMute() ? '\u
 setUpSeeds();
 setMode('walk');
 updateScores();
-setTimeout(() => toast('Welcome to Baba’s Joint! Walk up to a table to play, or tap ☰ for the tables and a tour.', 6000), 600);
+setTimeout(() => toast('Welcome to Ilé Eré, the House of Play! Walk up to a table to play, or tap ☰ for the tables and a tour.', 6000), 600);
 
 // ── Seed counts over each pit ──
 const counts = [];
@@ -913,7 +913,7 @@ const RUN_SPEED = 3.0;
 const BODY_R = 0.27;
 const walker = {
   pos: SPAWN.clone(),
-  heading: Math.PI, // facing into the joint (-z)
+  heading: Math.PI, // facing into the house (-z)
   speed: 0,
   target: null, // a point to walk to (from a tap or click)
   goingTo: null, // a table to use on arrival
@@ -1332,7 +1332,7 @@ async function saveWins(statusEl) {
   statusEl.textContent = 'Saving to start.ng…';
   const saved = await saveRun(leaderboardStats());
   statusEl.textContent = saved.ok
-    ? (saved.result.improved ? `New best! You're #${saved.result.rank} at the joint.` : `You're #${saved.result.rank} on the leaderboard.`)
+    ? (saved.result.improved ? `New best! You're #${saved.result.rank} at Ilé Eré.` : `You're #${saved.result.rank} on the leaderboard.`)
     : saved.error || 'Could not save to start.ng.';
 }
 async function finishTable(id, result) {
@@ -1461,7 +1461,7 @@ function stepMinimap(dt) {
 }
 
 // ── How to play: a page about the joint and one per game ──
-const GUIDE_TABS = [['joint', 'The joint'], ['ayo', 'Ayo'], ['draughts', 'Draughts'], ['whot', 'Whot'], ['ludo', 'Ludo'], ['snooker', 'Snooker'], ['foosball', 'Table football']];
+const GUIDE_TABS = [['joint', 'The house'], ['ayo', 'Ayo'], ['draughts', 'Draughts'], ['whot', 'Whot'], ['ludo', 'Ludo'], ['snooker', 'Snooker'], ['foosball', 'Table football']];
 let guideTab = 'joint';
 function showGuide(key) {
   guideTab = key;
@@ -1530,7 +1530,7 @@ function startTour() {
   Object.assign(tour, { active: true, stop: 0 });
   $('tour-end').hidden = false;
   showPrompt(null);
-  say('Welcome! Let me show you round my joint. Just follow the line.', 'baba', 3600);
+  say('Welcome to Ilé Eré! Let me show you round. Just follow the line.', 'baba', 3600);
   tour.timer = setTimeout(tourNext, 2600);
 }
 function tourNext() {
@@ -1914,7 +1914,7 @@ if (cover) {
   document.body.classList.add('cover');
   const t = document.createElement('div');
   t.className = 'cover-title';
-  t.innerHTML = '<h1>Baba’s <span>Joint</span></h1><p>Walk in. Pick a table. Play.</p>';
+  t.innerHTML = '<h1>Ilé <span>Eré</span></h1><p>House of Play</p><small>Walk in. Pick a table. Play.</small>';
   document.body.append(t);
   // play a few opening moves so the board looks lived-in
   game = newGame();

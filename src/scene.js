@@ -1,4 +1,4 @@
-// Baba's Joint: lighting, the game house, and the Ayo table with its carved board and seeds.
+// Ilé Eré: lighting, the game house, and the Ayo table with its carved board and seeds.
 // The Ayo table sits at the origin; the rest of the house (other tables, courtyard, gate) comes
 // from house.js.
 import * as THREE from 'three';

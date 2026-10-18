@@ -1,7 +1,7 @@
 {
   "leaderboard": {
     "stats": [
-      { "key": "wins", "label": "Wins at the joint", "order": "highest" },
+      { "key": "wins", "label": "Wins at Ilé Eré", "order": "highest" },
       { "key": "ayo", "label": "Ayo", "order": "highest" },
       { "key": "whot", "label": "Whot", "order": "highest" },
       { "key": "boards", "label": "Draughts & Ludo", "order": "highest" },

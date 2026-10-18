@@ -1,4 +1,4 @@
-# Baba's Joint
+# Ilé Eré · House of Play
 
 A Lagos game house you walk into as your own start.ng character. Tables line the verandah and the courtyard: **Ayo** with Baba, **Draughts** with Tunde the barber, **Whot** with Iya Bisi and friends, **Ludo** with Kemi and Tobi, **Snooker** with Emeka and **Table football** with Chidi. Walk up to a table and sit down to play. A three.js game for [start.ng](https://start.ng).
 
@@ -23,7 +23,7 @@ Walking: WASD or arrow keys (Shift to hurry), drag to look around, or tap the fl
 
 Sit down with Baba for a game of **Ayo**, the Yoruba seed game.
 
-![Baba’s Joint](cover.webp)
+![Ilé Eré](cover.webp)
 
 ## How to play
 

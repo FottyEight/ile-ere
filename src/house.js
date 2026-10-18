@@ -1,4 +1,4 @@
-// Baba's Joint: the game house around the Ayo table. A long verandah with a table for each game,
+// Ilé Eré (House of Play): the game house around the Ayo table. A long verandah with a table for each game,
 // a walled courtyard with the snooker and table-football tables, and the gate you walk in by.
 //
 // Layout (metres): the verandah runs along x from -3.6 to 14.4, back wall at z = -2.1, open
@@ -134,11 +134,13 @@ export function buildHouse(scene, add) {
     g.strokeRect(14, 14, w - 28, h - 28);
     g.fillStyle = '#f2c14e';
     g.textAlign = 'center';
-    g.font = 'bold 104px Georgia, serif';
-    g.fillText("BABA'S JOINT", w / 2, 128);
+    g.font = 'bold 96px Georgia, serif';
+    g.fillText('Ilé Eré', w / 2, 110);
+    g.font = 'italic 34px Georgia, serif';
+    g.fillText('— House of Play —', w / 2, 158);
     g.fillStyle = '#fffaf2';
-    g.font = 'bold 40px Arial, sans-serif';
-    g.fillText('AYO  •  DRAUGHTS  •  WHOT  •  LUDO  •  SNOOKER', w / 2, 200);
+    g.font = 'bold 28px Arial, sans-serif';
+    g.fillText('AYO · DRAUGHTS · WHOT · LUDO · SNOOKER · TABLE FOOTBALL', w / 2, 214);
   });
   const sign = add(new THREE.BoxGeometry(4.2, 1.05, 0.06), new THREE.MeshStandardMaterial({ map: signTex, roughness: 0.7 }), 5.1, 2.62, VERANDAH.front + 0.2);
   sign.material = [metal, metal, metal, metal, sign.material, metal];
