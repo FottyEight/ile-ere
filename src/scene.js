@@ -73,7 +73,8 @@ export async function buildScene(renderer) {
 
   // Afternoon light from the sky photo; the house blocks most of it so it reads as shade.
   // (started now, used once everything else is queued, so all downloads run together)
-  const sky = new RGBELoader(manager).loadAsync('assets/sky.hdr').then((hdr) => {
+  // (sky.rgbe.txt is a Radiance .hdr file, named .txt because start.ng only serves certain file types)
+  const sky = new RGBELoader(manager).loadAsync('assets/sky.rgbe.txt').then((hdr) => {
     hdr.mapping = THREE.EquirectangularReflectionMapping;
     scene.environment = hdr;
     scene.background = hdr;
