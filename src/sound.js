@@ -278,9 +278,34 @@ export function setVoice(who, v) { VOICES[who] = { ...VOICES[who], ...v }; }
 const FORMANTS = { a: [780, 1250], e: [480, 1900], i: [320, 2300], o: [520, 920], u: [360, 800] };
 const SOFT = new Set(['s', 'f', 'h', 'c', 'x', 'z']);
 const HARD = new Set(['t', 'k', 'p', 'b', 'd', 'g', 'j', 'q']);
+// Real recorded lines, if any have been added: assets/audio/voice/<who>__<line>.mp3, listed in
+// voice/voices.json (node tools/voices.mjs writes it). "any__pick-two.mp3" fits anybody.
+// A recording replaces the babble for that exact line; everything else is still babble.
+export const lineKey = (text) => text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+const whoKey = (who) => lineKey(who === 'baba' ? 'baba' : who);
+let recorded = new Set();
+fetch(AUDIO + 'voice/voices.json').then((r) => (r.ok ? r.json() : [])).then((list) => { recorded = new Set(list); }).catch(() => {});
+function recordedLine(who, text) {
+  const line = lineKey(text);
+  for (const f of [`${whoKey(who)}__${line}.mp3`, `any__${line}.mp3`]) if (recorded.has(f)) return `voice/${f}`;
+  return null;
+}
+
 export function speak(who, text, pos, seconds) {
   if (!ctx || muted || !text || tooFar(pos, 18)) return;
   duck(seconds + 0.3);
+  const real = recordedLine(who, text);
+  if (real) {
+    const buf = buffers.get(real);
+    if (buf) {
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      src.connect(pos ? placed(pos, { ref: 1.4, rolloff: 1.1 }) : master);
+      src.start();
+      return;
+    }
+    decode(real); // ready next time; babble this time
+  }
   const v = VOICES[who] ?? { pitch: 150, pace: 1 };
   const out = ctx.createGain();
   out.gain.value = 0.8;
