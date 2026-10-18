@@ -1,0 +1,100 @@
+{
+  "files": {
+    "amb_day": "amb_day_loop.mp3",
+    "amb_evening": "amb_evening_loop.mp3",
+    "amb_night": "amb_night_loop.mp3",
+    "ball_hit": [
+      "ball_hit_1.mp3",
+      "ball_hit_2.mp3",
+      "ball_hit_3.mp3"
+    ],
+    "ball_pocket": [
+      "ball_pocket_1.mp3",
+      "ball_pocket_2.mp3"
+    ],
+    "card_deal": [
+      "card_deal_1.mp3",
+      "card_deal_2.mp3",
+      "card_deal_3.mp3"
+    ],
+    "card_draw": "card_draw.mp3",
+    "card_shuffle": "card_shuffle.mp3",
+    "card_slap": [
+      "card_slap_1.mp3",
+      "card_slap_2.mp3",
+      "card_slap_3.mp3"
+    ],
+    "chicken": [
+      "chicken_1.mp3",
+      "chicken_2.mp3",
+      "chicken_3.mp3"
+    ],
+    "cloth": [
+      "cloth_1.mp3"
+    ],
+    "cue_strike": [
+      "cue_strike_1.mp3",
+      "cue_strike_2.mp3"
+    ],
+    "cushion": [
+      "cushion_1.mp3"
+    ],
+    "dice_roll": [
+      "dice_roll_1.mp3",
+      "dice_roll_2.mp3"
+    ],
+    "foos_goal": "foos_goal.mp3",
+    "foos_kick": [
+      "foos_kick_1.mp3",
+      "foos_kick_2.mp3",
+      "foos_kick_3.mp3"
+    ],
+    "foos_rattle": "foos_rattle.mp3",
+    "generator_hum": "generator_hum_loop.mp3",
+    "goal_cheer": "goal_cheer.mp3",
+    "lose": "lose.mp3",
+    "music": [
+      "music_1.mp3",
+      "music_2.mp3"
+    ],
+    "okada_pass": "okada_pass.mp3",
+    "piece_place": [
+      "piece_place_1.mp3",
+      "piece_place_2.mp3",
+      "piece_place_3.mp3"
+    ],
+    "piece_slide": "piece_slide.mp3",
+    "radio_static": "radio_static.mp3",
+    "rooster": "rooster.mp3",
+    "seed_drop": [
+      "seed_drop_1.mp3",
+      "seed_drop_2.mp3",
+      "seed_drop_3.mp3",
+      "seed_drop_4.mp3"
+    ],
+    "seed_scoop": "seed_scoop.mp3",
+    "seeds_capture": "seeds_capture.mp3",
+    "step_concrete": [
+      "step_concrete_1.mp3",
+      "step_concrete_2.mp3",
+      "step_concrete_3.mp3",
+      "step_concrete_4.mp3"
+    ],
+    "step_tile": [
+      "step_tile_1.mp3",
+      "step_tile_2.mp3",
+      "step_tile_3.mp3",
+      "step_tile_4.mp3"
+    ],
+    "stool_sit": "stool_sit.mp3",
+    "token_move": [
+      "token_move_1.mp3",
+      "token_move_2.mp3",
+      "token_move_3.mp3"
+    ],
+    "ui_click": "ui_click.mp3",
+    "ui_pop": "ui_pop.mp3",
+    "win": "win.mp3"
+  },
+  "totalBytes": 4917050
+}
