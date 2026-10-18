@@ -1914,7 +1914,7 @@ if (cover) {
   document.body.classList.add('cover');
   const t = document.createElement('div');
   t.className = 'cover-title';
-  t.innerHTML = '<h1>Ayo <span>Olopon</span></h1><p>Sit down with Baba. Play Ayo.</p>';
+  t.innerHTML = '<h1>Baba’s <span>Joint</span></h1><p>Walk in. Pick a table. Play.</p>';
   document.body.append(t);
   // play a few opening moves so the board looks lived-in
   game = newGame();
@@ -1928,14 +1928,15 @@ if (cover) {
     game = r.state;
   }
   for (let i = 0; i < 12; i++) pitSeeds[i].forEach((s, n) => s.position.copy(seedSlot(i, n, s.userData.id)));
-  // side view: you reaching in on the left, Baba watching on the right
-  boardTarget.set(0, 0.78, 0);
-  yaw = 1.5;
-  pitch = 0.26;
-  dist = 2.75;
+  // a wide view from the courtyard: the verandah and its tables, with you at Ayo against Baba
+  // (?cover=x,y,z,yaw,pitch,dist to try another framing)
+  const [cx, cy, cz, cyaw, cpitch, cdist] = (params.get('cover') || '3.6,1.0,0,-0.55,0.24,9').split(',').map(Number);
+  boardTarget.set(cx, cy, cz);
+  yaw = cyaw;
+  pitch = cpitch;
+  dist = cdist;
   pose.me.reach = 1;
   pose.me.reachToX = 0.05;
-  camera.setViewOffset(innerWidth, innerHeight, -innerWidth * 0.12, 0, innerWidth, innerHeight);
   mode = 'cover';
 }
 

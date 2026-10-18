@@ -412,7 +412,7 @@ export const GUIDES = {
 
   ayo: {
     title: 'How to play Ayo',
-    intro: 'Ayo Olopon is the Yoruba seed game. You and Baba each have a row of six pits with 4 seeds in each. Capture more seeds than Baba: 25 wins.',
+    intro: 'Ayo is the Yoruba seed game. You and Baba each have a row of six pits with 4 seeds in each. Capture more seeds than Baba: 25 wins.',
     sections: [
       {
         heading: 'Your turn: sowing',

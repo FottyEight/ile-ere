@@ -19,11 +19,11 @@ The start.ng leaderboard ranks players by their total wins at the joint on Norma
 
 Walking: WASD or arrow keys (Shift to hurry), drag to look around, or tap the floor or a table to walk there. Next to a table, press E or tap the button to sit down.
 
-## Ayo Olopon
+## The Ayo table
 
 Sit down with Baba for a game of **Ayo**, the Yoruba seed game.
 
-![Ayo Olopon](cover.png)
+![Baba’s Joint](cover.webp)
 
 ## How to play
 
